@@ -27,7 +27,7 @@ class BestTrackData:
     _RAD2: str
     _RAD3: str
     _RAD4: str
-    _RADP: str
+    _RADP: str = ""
     _RRP: str = ""
     _MRD: str = ""
     _GUSTS: str = ""
@@ -50,11 +50,11 @@ class BestTrackData:
     @property
     def datetime(self):
         return datetime(
-            int(self._YYYYMMDDHH[0:4]), 
-            int(self._YYYYMMDDHH[4:6]), 
-            int(self._YYYYMMDDHH[6:8]), 
+            int(self._YYYYMMDDHH[0:4]),
+            int(self._YYYYMMDDHH[4:6]),
+            int(self._YYYYMMDDHH[6:8]),
             int(self._YYYYMMDDHH[8:10]))
-        
+
 
 
 def decode_best_track_file(filename):
