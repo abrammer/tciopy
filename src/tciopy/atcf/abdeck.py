@@ -264,4 +264,4 @@ def main(input_filepath):
 
 
 if __name__ == "__main__":
-    main("/Users/abrammer/Downloads/bal092022.dat")
+    datadir= Path(__file__).parent.parent.parent.parent / "data"

@@ -551,7 +551,8 @@ class Analysis(CommonFields):
 def main():
     "demo function"
     stime = time.time()
-    df = read_fdeck("/Users/abrammer/repos/tciopy/data/fal132023.dat")
+    datadir= Path(__file__).parent.parent.parent.parent / "data"
+    df = read_fdeck(datadir/"fal132023.dat")
     print(time.time() - stime)
     print(df)  # [df["format"] == 30].dropna(axis="columns", how="all"))
 

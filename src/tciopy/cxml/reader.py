@@ -91,13 +91,11 @@ def _extract_radii(tag, xpath, key):
 
 
 def main():
-    df = read_cxml(
-        # "/Users/abrammer/repos/tciopy/data/kwbc_20200918120000_GEFS_glob_prod_esttr_glo.xml"
-        "/Users/abrammer/repos/tciopy/data/complete_cxml.xml"
-        # "/Users/abrammer/Downloads/z_tigge_c_egrr_20230612000000_mogreps_glob_prod_etctr_glo.xml"
-    )
+    from pathlib import Path
+    datadir= Path(__file__).parent.parent.parent.parent / "data"
+    df = read_cxml(datadir/"complete_cxml.xml")
     print(df)
     # print(df.dtypes)
 
-
-main()
+if __name__ == "__main__":
+    main()

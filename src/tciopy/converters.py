@@ -31,13 +31,15 @@ class StrConverter(ConversionDescriptor):
 
     def decode(self, value):
         return value
-    
+
 
 class IntConverter(ConversionDescriptor):
     def __init__(self, *, default=np.nan):
         self._default = default
 
     def decode(self, value):
+        if value is self._default:
+            return value
         return int(value)
 
 
