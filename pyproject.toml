@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tciopy"
+version = "0.1.0"
+description = "IO utilities for Tropical Cyclone Track data formats"
+authors = [
+    {name = "Alan Brammer", email = "a1brammer@gmail.com"},
+]
+[options]
+python_requires = ">=3.9"
+
+[tool.setuptools.packages.find]
+where = ["src"]  # list of folders that contain the packages (["."] by default)
+include = ["tciopy*"]  # package names should match these glob patterns (["*"] by default)
+
+[tool.black]
+line-length = 100
