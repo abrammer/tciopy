@@ -92,10 +92,12 @@ def _extract_radii(tag, xpath, key):
 
 def main():
     from pathlib import Path
-    datadir= Path(__file__).parent.parent.parent.parent / "data"
-    df = read_cxml(datadir/"complete_cxml.xml")
+
+    datadir = Path(__file__).parent.parent.parent.parent / "data"
+    df = read_cxml(datadir / "complete_cxml.xml")
     print(df)
     # print(df.dtypes)
+
 
 if __name__ == "__main__":
     main()

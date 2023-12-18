@@ -21,9 +21,10 @@ class ConversionDescriptor(ABC):
         if obj is None:
             return self._default
         value = getattr(obj, self._name)
-        if not value:
+        if not value or value is self._default:
             return self._default
         return self.decode(value)
+
 
 class StrConverter(ConversionDescriptor):
     def __init__(self, *, default=""):
@@ -54,41 +55,45 @@ class FloatConverter(ConversionDescriptor):
 class DatetimeConverter(ConversionDescriptor):
     def __init__(self, *, datetime_format="%Y%m%d%H", default=np.datetime64("NaT")):
         self._default = default
-        self.format =  datetime_format
+        self.format = datetime_format
 
     def decode(self, value):
         if self.format == "%Y%m%d%H":
             return datetime(int(value[:4]), int(value[4:6]), int(value[6:8]), int(value[8:10]))
         elif self.format == "%Y%m%d%H%M":
-            return datetime(int(value[:4]), int(value[4:6]), int(value[6:8]), int(value[8:10]), int(value[10:12]))
+            return datetime(
+                int(value[:4]),
+                int(value[4:6]),
+                int(value[6:8]),
+                int(value[8:10]),
+                int(value[10:12]),
+            )
         else:
             return datetime.strptime(value, self.format)
 
 
 class LatLonConverter(ConversionDescriptor):
-    def __init__(self, *,scale=0.1, default=None):
+    def __init__(self, *, scale=0.1, default=None):
         super().__init__()
         self.scale = scale
         self._default = default or np.nan
-        self.hemisphere_signs = {"W":-1, "S":-1}
+        self.hemisphere_signs = {"W": -1, "S": -1}
 
     def decode(self, value):
         degsign = self.hemisphere_signs.get(value[-1], 1)
-        return int(value[:-1])* degsign* self.scale
+        return int(value[:-1]) * degsign * self.scale
 
-    
 
 def main():
     from dataclasses import dataclass
 
     @dataclass
     class InventoryItem:
-        date: DatetimeConverter# = DatetimeConvertor(default="1970010100")
-        vmax: IntConverter# = IntConvertor(default=5)
-        mslp: IntConverter# = IntConvertor(default=10)
-        lat: LatLonConverter# = LatLonConvertor(default=0)
-        lon: LatLonConverter# = LatLonConvertor(default=0)
-
+        date: datetime = DatetimeConverter(default="1970010100")
+        vmax: int = IntConverter(default=5)
+        mslp: int = IntConverter(default=10)
+        lat: float = LatLonConverter(default=0)
+        lon: float = LatLonConverter(default=0)
 
     i = [
         InventoryItem("2023091018", "65", "990", "15N", "90W"),
@@ -96,6 +101,7 @@ def main():
     ]
 
     import pandas as pd
+
     print(pd.DataFrame(i))
 
 

@@ -10,8 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from tciopy.converters import (DatetimeConverter, IntConverter,
-                               LatLonConverter, StrConverter)
+from tciopy.converters import DatetimeConverter, IntConverter, LatLonConverter, StrConverter
 
 
 def read_adeck(fname: str | Path):
@@ -264,4 +263,4 @@ def main(input_filepath):
 
 
 if __name__ == "__main__":
-    datadir= Path(__file__).parent.parent.parent.parent / "data"
+    datadir = Path(__file__).parent.parent.parent.parent / "data"
