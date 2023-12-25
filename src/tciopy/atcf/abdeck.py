@@ -6,84 +6,20 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-
+from itertools import zip_longest
 import numpy as np
 import pandas as pd
 
 from tciopy.converters import DatetimeConverter, IntConverter, LatLonConverter, StrConverter
 
 
-def read_adeck(fname: str | Path):
+def read_adeck(fname: str ):
     """Read adeck from filename into pandas dataframe"""
     # Tried versions of parsing colums in the read_csv func and they were much
     # slower
     if isinstance(fname, str):
         fname = Path(fname)
 
-    # atcf_colnames = [
-    #     "basin",
-    #     "number",
-    #     "datetime",
-    #     "tnum",
-    #     "tech",
-    #     "tau",
-    #     "lat",
-    #     "lon",
-    #     "vmax",
-    #     "mslp",
-    #     "type",
-    #     "rad",
-    #     "windcode",
-    #     "rad1",
-    #     "rad2",
-    #     "rad3",
-    #     "rad4",
-    #     "pouter",
-    #     "router",
-    #     "rmw",
-    #     "gusts",
-    #     "eye",
-    #     "subregion",
-    #     "maxseas",
-    #     "initials",
-    #     "direction",
-    #     "speed",
-    #     "stormname",
-    #     "depth",
-    #     "seas",
-    #     "seascode",
-    #     "seas1",
-    #     "seas2",
-    #     "seas3",
-    #     "seas4",
-    #     "userdefined1",
-    #     "userdata1",
-    #     "userdefined2",
-    #     "userdata2",
-    #     "userdefined3",
-    #     "userdata3",
-    #     "userdefined4",
-    #     "userdata4",
-    #     "userdefined5",
-    #     "userdata5",
-    # ]
-    # dtypes = {
-    #     "basin": str,
-    #     "datetime": str,
-    #     "tech": str,
-    #     "tau": float,
-    #     "vmax": float,
-    #     "mslp": float,
-    #     "type": str,
-    #     "rad": float,
-    #     "windcode": str,
-    #     "rad1": float,
-    #     "rad2": float,
-    #     "rad3": float,
-    #     "rad4": float,
-    # }
-
-    # converters = {"lat": str2ll, "lon": str2ll}
     # n.b. ' *, *' takes care of stripping whitespace
     #  python engine allows for providing too many column names
     #  datetime as converter is super slow, str2ll is neglible time addition
@@ -91,22 +27,23 @@ def read_adeck(fname: str | Path):
         opener = gzip.open
     else:
         opener = open
-    alldata = []
+    alldata = AdeckEntry()
     with opener(fname, mode="rt", newline="\n") as io_file:
         for line in io_file:
             splitline = re.split(r",\s+", line)
-            alldata.append(AdeckData(*splitline))
+            alldata.append(splitline)
         # datum = pd.read_csv(
         #     io_file,
         #     sep=" *, *",
         #     engine="python",
         #     index_col=False,
         #     header=None,
-        #     on_bad_lines="warn",
+        #     # on_bad_lines="warn",
         #     names=atcf_colnames,
         #     dtype=dtypes,
         # )
-    datum = pd.DataFrame(alldata)
+    datum = alldata.to_dataframe()
+    return datum
     # for key, converter in converters.items():
     #     datum[key] = datum[key].apply(converter)
     datum = datum.loc[(datum["lat"] != 0) | (datum["lon"] != 0)]
@@ -124,7 +61,7 @@ def read_adeck(fname: str | Path):
     # This transposes mulitple rows for each radii, to a single row with multiple columns.
     for kt in 34, 50, 64:
         for qdc, quad in [("NEQ", "NEQ"), ("SEQ", "SEQ"), ("SWQ", "SWQ"), ("NWQ", "NWQ")]:
-            datum[f"rad{kt}_{qdc}"] = datum[datum["rad"] == kt][f"radx_{quad}"]
+            datum[f"rad{kt}_{qdc}"] = datum[datum["rad"] == kt][f"rad_{quad}"]
 
     aggmethod = {
         "object": "first",
@@ -132,14 +69,14 @@ def read_adeck(fname: str | Path):
         "float64": "mean",
         "datetime64[ns]": "first",
     }
-    agg_dict = {index: aggmethod.get(str(dtype)) for index, dtype in datum.dtypes.items()}
+    agg_dict = {index: aggmethod.get(str(dtype), "first") for index, dtype in datum.dtypes.items()}
     decker = (
         datum.groupby(["basin", "number", "datetime", "tech", "tau"])
         .aggregate(agg_dict)
         .reset_index(drop=True)
     )
     decker.drop(
-        columns=["rad", "windcode", "radx_NEQ", "radx_NWQ", "radx_SEQ", "radx_SWQ"], inplace=True
+        columns=["rad", "windcode", "rad_NEQ", "rad_NWQ", "rad_SEQ", "rad_SWQ"], inplace=True
     )
 
     # stretch out the stormname, across neighboring rows.
@@ -149,58 +86,95 @@ def read_adeck(fname: str | Path):
     return decker.reset_index(drop=True)
 
 
-def read_bdeck(fname: str | Path):
+def read_bdeck(fname: str):
     """Read bdeck from filename into pandas dataframe"""
     return read_adeck(fname)
 
+NAN_VALUES = set(("", "NA", "N/A", "NaN", "nan", "NAN"))
+def int_converter(x):
+    mask = (x=='' )| (x =='nan')
+    z = np.empty(x.shape,dtype=float, )
+    z[~mask] = x[~mask].astype(float)
+    z[mask] = np.nan
+    return z
+
+
+class latlonconverter:
+    def __init__(self, scale):
+        self.scale = scale
+    def __call__(self, series):
+        series = pd.Series(series)
+        hemisign = 1 - series.str.endswith(('W', 'S')) * 2
+        ll = series.str[:-1].astype(int) * hemisign
+        return ll * self.scale
+
+
+class datetimeconverter:
+    def __init__(self, datetime_format="%Y%m%d%H"):
+        self.datetime_format = datetime_format
+    def __call__(self, series):
+        return pd.to_datetime(series, format=self.datetime_format)
 
 @dataclass
-class AdeckData:
-    basin: str = StrConverter()
-    number: int = IntConverter()
-    datetime: datetime = DatetimeConverter(datetime_format="%Y%m%d%H")
-    tnum: int = IntConverter()
-    tech: str = StrConverter()
-    tau: int = IntConverter()
-    lat: float = LatLonConverter(scale=0.1)
-    lon: float = LatLonConverter(scale=0.1)
-    vmax: int = IntConverter()
-    mslp: int = IntConverter()
-    type: str = StrConverter()
-    rad: int = IntConverter()
-    windcode: str = StrConverter()
-    radx_NEQ: int = IntConverter()
-    radx_SEQ: int = IntConverter()
-    radx_SWQ: int = IntConverter()
-    radx_NWQ: int = IntConverter()
-    pouter: int = IntConverter()
-    router: int = IntConverter()
-    rmw: int = IntConverter()
-    gusts: int = IntConverter()
-    eye: int = IntConverter()
-    subregion: str = StrConverter()
-    maxseas: int = IntConverter()
-    initials: str = StrConverter()
-    direction: int = IntConverter()
-    speed: int = IntConverter()
-    stormname: str = StrConverter()
-    depth: str = StrConverter()
-    seas: int = IntConverter()
-    seascode: str = StrConverter()
-    seas1: int = IntConverter()
-    seas2: int = IntConverter()
-    seas3: int = IntConverter()
-    seas4: int = IntConverter()
-    userdefined1: str = StrConverter()
-    userdata1: str = StrConverter()
-    userdefined2: str = StrConverter()
-    userdata2: str = StrConverter()
-    userdefined3: str = StrConverter()
-    userdata3: str = StrConverter()
-    userdefined4: str = StrConverter()
-    userdata4: str = StrConverter()
-    userdefined5: str = StrConverter()
-    userdata5: str = StrConverter()
+class AdeckEntry:
+    data_columns = {
+        'basin'  : {'data':[], },
+        'number'  : {'data':[], "converter": int_converter, },
+        'datetime'  : {'data':[], "converter": datetimeconverter(datetime_format="%Y%m%d%H"), },
+        'tnum'  : {'data':[], "converter": int_converter, },
+        'tech'  : {'data':[], },
+        'tau'  : {'data':[], "converter": int_converter, },
+        'lat'  : {'data':[], "converter": latlonconverter(scale=0.1), },
+        'lon'  : {'data':[], "converter": latlonconverter(scale=0.1), },
+        'vmax'  : {'data':[], "converter": int_converter, },
+        'mslp'  : {'data':[], "converter": int_converter, },
+        'type'  : {'data':[], },
+        'rad'  : {'data':[], "converter": int_converter, },
+        'windcode'  : {'data':[], },
+        'rad_NEQ'  : {'data':[], "converter": int_converter, },
+        'rad_SEQ'  : {'data':[], "converter": int_converter, },
+        'rad_SWQ'  : {'data':[], "converter": int_converter, },
+        'rad_NWQ'  : {'data':[], "converter": int_converter, },
+        'pouter'  : {'data':[], "converter": int_converter, },
+        'router'  : {'data':[], "converter": int_converter, },
+        'rmw'  : {'data':[], "converter": int_converter, },
+        'gusts'  : {'data':[], "converter": int_converter, },
+        'eye'  : {'data':[], "converter": int_converter, },
+        'subregion'  : {'data':[], },
+        'maxseas'  : {'data':[], "converter": int_converter, },
+        'initials'  : {'data':[], },
+        'direction'  : {'data':[], "converter": int_converter, },
+        'speed'  : {'data':[], "converter": int_converter, },
+        'stormname'  : {'data':[], },
+        'depth'  : {'data':[], },
+        'seas'  : {'data':[], "converter": int_converter },
+        'seascode'  : {'data':[], },
+        'seas1'  : {'data':[], "converter": int_converter, },
+        'seas2'  : {'data':[], "converter": int_converter, },
+        'seas3'  : {'data':[], "converter": int_converter, },
+        'seas4'  : {'data':[], "converter": int_converter, },
+        'userdefined1'  : {'data':[], },
+        'userdata1'  : {'data':[], },
+        'userdefined2'  : {'data':[], },
+        'userdata2'  : {'data':[], },
+        'userdefined3'  : {'data':[], },
+        'userdata3'  : {'data':[], },
+        'userdefined4'  : {'data':[], },
+        'userdata4'  : {'data':[], },
+        'userdefined5'  : {'data':[], },
+        'userdata5'  : {'data':[], },
+    }
+    
+    def append(self, values):
+        for key, val in zip_longest(self.data_columns.keys(), values, fillvalue=''):
+            self.data_columns[key]['data'].append(val)
+    
+    def to_dataframe(self):
+        raw_data = {key:np.array(self.data_columns[key]['data'], dtype=object) for key in self.data_columns}
+        for key, converter in self.data_columns.items():
+            if 'converter' in converter:
+                raw_data[key] = converter['converter'](raw_data[key])
+        return pd.DataFrame(raw_data)
 
 
 def format_adeck_line(row):
@@ -226,28 +200,16 @@ def format_adeck_line(row):
         yield line
 
 
-def str2ll(x):
-    """Convert atcf str to latlon -- internal single value only"""
-    converters = {"N": 1, "S": -1, "W": -1, "E": 1}
-    x = x.strip()
-    if x == "0":
-        ret = 0
-    else:
-        try:
-            ret = (int(x[:-1]) * converters[x[-1]]) / 10
-        except (ValueError, IndexError):
-            return 0
-    return ret
-
-
 def main(input_filepath):
     """demo function of parsing single adeck file"""
     import time
-
     stime = time.time()
     deck = read_adeck(input_filepath)
     print(time.time() - stime)
+
     print(deck)
+
+    # print(deck)
     # print(deck)
     # for key, storm in deck.groupby(['basin', 'number', 'datetime']):
     #     adeck_name = f"a{key[0].lower()}{key[1]}{key[2]:%Y}.dat"
@@ -264,3 +226,5 @@ def main(input_filepath):
 
 if __name__ == "__main__":
     datadir = Path(__file__).parent.parent.parent.parent / "data"
+    print(datadir)
+    main("/home/abrammer/repos/tciopy/data/aal032023.dat")

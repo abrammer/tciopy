@@ -17,7 +17,7 @@ from tciopy.converters import (
 )
 
 
-def read_fdeck(fname: str | Path) -> pd.DataFrame:
+def read_fdeck(fname: str ) -> pd.DataFrame:
     """Read an f-deck file into a pandas DataFrame"""
     if not isinstance(fname, Path):
         fname = Path(fname)
