@@ -3,17 +3,18 @@ Read and write ATCF a or b deck files
 """
 import gzip
 import re
-from dataclasses import dataclass
-from datetime import datetime
+# from dataclasses import dataclass
+# from datetime import datetime
 from pathlib import Path
 from itertools import zip_longest
 import numpy as np
 import pandas as pd
 
-from tciopy.converters import DatetimeConverter, IntConverter, LatLonConverter, StrConverter
+# from tciopy.converters import DatetimeConverter, IntConverter, LatLonConverter, StrConverter
+from tciopy.converters import datetimeconverter, int_converter, latlonconverter
 
 
-def read_adeck(fname: str ):
+def read_adeck(fname: str):
     """Read adeck from filename into pandas dataframe"""
     # Tried versions of parsing colums in the read_csv func and they were much
     # slower
@@ -90,90 +91,181 @@ def read_bdeck(fname: str):
     """Read bdeck from filename into pandas dataframe"""
     return read_adeck(fname)
 
-NAN_VALUES = set(("", "NA", "N/A", "NaN", "nan", "NAN"))
-def int_converter(x):
-    mask = (x=='' )| (x =='nan')
-    z = np.empty(x.shape,dtype=float, )
-    z[~mask] = x[~mask].astype(float)
-    z[mask] = np.nan
-    return z
 
-
-class latlonconverter:
-    def __init__(self, scale):
-        self.scale = scale
-    def __call__(self, series):
-        series = pd.Series(series)
-        hemisign = 1 - series.str.endswith(('W', 'S')) * 2
-        ll = series.str[:-1].astype(int) * hemisign
-        return ll * self.scale
-
-
-class datetimeconverter:
-    def __init__(self, datetime_format="%Y%m%d%H"):
-        self.datetime_format = datetime_format
-    def __call__(self, series):
-        return pd.to_datetime(series, format=self.datetime_format)
-
-@dataclass
 class AdeckEntry:
-    data_columns = {
-        'basin'  : {'data':[], },
-        'number'  : {'data':[], "converter": int_converter, },
-        'datetime'  : {'data':[], "converter": datetimeconverter(datetime_format="%Y%m%d%H"), },
-        'tnum'  : {'data':[], "converter": int_converter, },
-        'tech'  : {'data':[], },
-        'tau'  : {'data':[], "converter": int_converter, },
-        'lat'  : {'data':[], "converter": latlonconverter(scale=0.1), },
-        'lon'  : {'data':[], "converter": latlonconverter(scale=0.1), },
-        'vmax'  : {'data':[], "converter": int_converter, },
-        'mslp'  : {'data':[], "converter": int_converter, },
-        'type'  : {'data':[], },
-        'rad'  : {'data':[], "converter": int_converter, },
-        'windcode'  : {'data':[], },
-        'rad_NEQ'  : {'data':[], "converter": int_converter, },
-        'rad_SEQ'  : {'data':[], "converter": int_converter, },
-        'rad_SWQ'  : {'data':[], "converter": int_converter, },
-        'rad_NWQ'  : {'data':[], "converter": int_converter, },
-        'pouter'  : {'data':[], "converter": int_converter, },
-        'router'  : {'data':[], "converter": int_converter, },
-        'rmw'  : {'data':[], "converter": int_converter, },
-        'gusts'  : {'data':[], "converter": int_converter, },
-        'eye'  : {'data':[], "converter": int_converter, },
-        'subregion'  : {'data':[], },
-        'maxseas'  : {'data':[], "converter": int_converter, },
-        'initials'  : {'data':[], },
-        'direction'  : {'data':[], "converter": int_converter, },
-        'speed'  : {'data':[], "converter": int_converter, },
-        'stormname'  : {'data':[], },
-        'depth'  : {'data':[], },
-        'seas'  : {'data':[], "converter": int_converter },
-        'seascode'  : {'data':[], },
-        'seas1'  : {'data':[], "converter": int_converter, },
-        'seas2'  : {'data':[], "converter": int_converter, },
-        'seas3'  : {'data':[], "converter": int_converter, },
-        'seas4'  : {'data':[], "converter": int_converter, },
-        'userdefined1'  : {'data':[], },
-        'userdata1'  : {'data':[], },
-        'userdefined2'  : {'data':[], },
-        'userdata2'  : {'data':[], },
-        'userdefined3'  : {'data':[], },
-        'userdata3'  : {'data':[], },
-        'userdefined4'  : {'data':[], },
-        'userdata4'  : {'data':[], },
-        'userdefined5'  : {'data':[], },
-        'userdata5'  : {'data':[], },
-    }
-    
+    def __init__(self):
+        self.data_store = {
+            "basin": {
+                "data": [],
+            },
+            "number": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "datetime": {
+                "data": [],
+                "converter": datetimeconverter(datetime_format="%Y%m%d%H"),
+            },
+            "tnum": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "tech": {
+                "data": [],
+            },
+            "tau": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "lat": {
+                "data": [],
+                "converter": latlonconverter(scale=0.1),
+            },
+            "lon": {
+                "data": [],
+                "converter": latlonconverter(scale=0.1),
+            },
+            "vmax": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "mslp": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "type": {
+                "data": [],
+            },
+            "rad": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "windcode": {
+                "data": [],
+            },
+            "rad_NEQ": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "rad_SEQ": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "rad_SWQ": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "rad_NWQ": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "pouter": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "router": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "rmw": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "gusts": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "eye": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "subregion": {
+                "data": [],
+            },
+            "maxseas": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "initials": {
+                "data": [],
+            },
+            "direction": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "speed": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "stormname": {
+                "data": [],
+            },
+            "depth": {
+                "data": [],
+            },
+            "seas": {"data": [], "converter": int_converter()},
+            "seascode": {
+                "data": [],
+            },
+            "seas1": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "seas2": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "seas3": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "seas4": {
+                "data": [],
+                "converter": int_converter(),
+            },
+            "userdefined1": {
+                "data": [],
+            },
+            "userdata1": {
+                "data": [],
+            },
+            "userdefined2": {
+                "data": [],
+            },
+            "userdata2": {
+                "data": [],
+            },
+            "userdefined3": {
+                "data": [],
+            },
+            "userdata3": {
+                "data": [],
+            },
+            "userdefined4": {
+                "data": [],
+            },
+            "userdata4": {
+                "data": [],
+            },
+            "userdefined5": {
+                "data": [],
+            },
+            "userdata5": {
+                "data": [],
+            },
+        }
+
     def append(self, values):
-        for key, val in zip_longest(self.data_columns.keys(), values, fillvalue=''):
-            self.data_columns[key]['data'].append(val)
-    
+        for key, val in zip_longest(self.data_store.keys(), values, fillvalue=""):
+            self.data_store[key]["data"].append(val)
+
     def to_dataframe(self):
-        raw_data = {key:np.array(self.data_columns[key]['data'], dtype=object) for key in self.data_columns}
-        for key, converter in self.data_columns.items():
-            if 'converter' in converter:
-                raw_data[key] = converter['converter'](raw_data[key])
+        raw_data = {
+            key: np.array(self.data_store[key]["data"], dtype=object) for key in self.data_store
+        }
+        for key, converter in self.data_store.items():
+            if "converter" in converter:
+                raw_data[key] = converter["converter"](raw_data[key])
         return pd.DataFrame(raw_data)
 
 
@@ -203,6 +295,7 @@ def format_adeck_line(row):
 def main(input_filepath):
     """demo function of parsing single adeck file"""
     import time
+
     stime = time.time()
     deck = read_adeck(input_filepath)
     print(time.time() - stime)
@@ -227,4 +320,4 @@ def main(input_filepath):
 if __name__ == "__main__":
     datadir = Path(__file__).parent.parent.parent.parent / "data"
     print(datadir)
-    main("/home/abrammer/repos/tciopy/data/aal032023.dat")
+    main(datadir / "aal032023.dat")

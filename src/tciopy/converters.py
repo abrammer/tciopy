@@ -1,109 +1,46 @@
-from datetime import datetime
-from abc import ABC, abstractmethod
 import numpy as np
+import pandas as pd
 
 
-class ConversionDescriptor(ABC):
-    _name = None
-    _default = None
 
-    def __set_name__(self, owner, name):
-        self._name = "_" + name
-
-    def __set__(self, obj, value):
-        setattr(obj, self._name, value)
-
-    @abstractmethod
-    def decode(self, value):
-        ...
-
-    def __get__(self, obj, dtype):
-        if obj is None:
-            return self._default
-        value = getattr(obj, self._name)
-        if not value or value is self._default:
-            return self._default
-        return self.decode(value)
-
-
-class StrConverter(ConversionDescriptor):
-    def __init__(self, *, default=""):
-        self._default = default
-
-    def decode(self, value):
-        return value
-
-
-class IntConverter(ConversionDescriptor):
-    def __init__(self, *, default=np.nan):
-        self._default = default
-
-    def decode(self, value):
-        if value is self._default:
-            return value
-        return int(value)
-
-
-class FloatConverter(ConversionDescriptor):
-    def __init__(self, *, default=np.nan):
-        self._default = default
-
-    def decode(self, value):
-        return float(value)
-
-
-class DatetimeConverter(ConversionDescriptor):
-    def __init__(self, *, datetime_format="%Y%m%d%H", default=np.datetime64("NaT")):
-        self._default = default
-        self.format = datetime_format
-
-    def decode(self, value):
-        if self.format == "%Y%m%d%H":
-            return datetime(int(value[:4]), int(value[4:6]), int(value[6:8]), int(value[8:10]))
-        elif self.format == "%Y%m%d%H%M":
-            return datetime(
-                int(value[:4]),
-                int(value[4:6]),
-                int(value[6:8]),
-                int(value[8:10]),
-                int(value[10:12]),
-            )
-        else:
-            return datetime.strptime(value, self.format)
-
-
-class LatLonConverter(ConversionDescriptor):
-    def __init__(self, *, scale=0.1, default=None):
-        super().__init__()
+class int_converter:
+    def __init__(self, scale=1):
         self.scale = scale
-        self._default = default or np.nan
-        self.hemisphere_signs = {"W": -1, "S": -1}
 
-    def decode(self, value):
-        degsign = self.hemisphere_signs.get(value[-1], 1)
-        return int(value[:-1]) * degsign * self.scale
-
-
-def main():
-    from dataclasses import dataclass
-
-    @dataclass
-    class InventoryItem:
-        date: datetime = DatetimeConverter(default="1970010100")
-        vmax: int = IntConverter(default=5)
-        mslp: int = IntConverter(default=10)
-        lat: float = LatLonConverter(default=0)
-        lon: float = LatLonConverter(default=0)
-
-    i = [
-        InventoryItem("2023091018", "65", "990", "15N", "90W"),
-        InventoryItem("2023091012", "65", "990", "12N", "89W"),
-    ]
-
-    import pandas as pd
-
-    print(pd.DataFrame(i))
+    def __call__(self, x):
+        mask = (x == "") | (x == "nan")
+        z = np.empty(
+            x.shape,
+            dtype=float,
+        )
+        z[~mask] = x[~mask].astype(float)
+        z[mask] = np.nan
+        return z * self.scale
 
 
-if __name__ == "__main__":
-    main()
+class latlonconverter:
+    def __init__(self, scale):
+        self.scale = scale
+
+    def __call__(self, series):
+        series = pd.Series(series)
+        hemisign = 1 - series.str.endswith(("W", "S")) * 2
+        ll = int_converter()(series.str[:-1]) * hemisign
+        return pd.Series(ll * self.scale)
+
+
+class datetimeconverter:
+    def __init__(self, datetime_format="%Y%m%d%H"):
+        self.datetime_format = datetime_format
+
+    def __call__(self, series):
+        return pd.to_datetime(series, format=self.datetime_format)
+
+
+class categoricalconverter:
+    def __init__(self,):
+        pass
+
+    def __call__(self, series):
+        return pd.Categorical(series)
+
