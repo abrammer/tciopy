@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "tciopy"
-version = "0.1.0"
 description = "IO utilities for Tropical Cyclone Track data formats"
 authors = [
     {name = "Alan Brammer", email = "a1brammer@gmail.com"},
 ]
+dynamic = ["version"]
+
 [options]
 python_requires = ">=3.9"
 
@@ -18,3 +19,6 @@ include = ["tciopy*"]  # package names should match these glob patterns (["*"] b
 
 [tool.black]
 line-length = 100
+
+[tool.setuptools_scm]
+# Needs to be here even though it's empty

@@ -44,7 +44,7 @@ def read_adeck(fname: str):
         #     dtype=dtypes,
         # )
     datum = alldata.to_dataframe()
-    return datum
+
     # for key, converter in converters.items():
     #     datum[key] = datum[key].apply(converter)
     datum = datum.loc[(datum["lat"] != 0) | (datum["lon"] != 0)]
