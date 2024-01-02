@@ -4,12 +4,13 @@ import time
 from itertools import zip_longest
 # from collections import defaultdict
 # from dataclasses import dataclass
-# from datetime import datetime
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 import numpy as np
-
+from tciopy.atcf.decks import BaseDeck
+from tciopy.converters import StringColumn, NumericColumn, CategoricalColumn, LatLonColumn, DatetimeColumn
 
 from tciopy.converters import datetimeconverter, int_converter, latlonconverter, categoricalconverter
 
@@ -25,13 +26,13 @@ def read_fdeck(fname: str) -> pd.DataFrame:
         opener = open
 
     alldata = {
-        7: FDeckAnalysis(),
-        6: FDeckDropsonde(),
-        5: FDeckAircraft(),
-        4: FDeckRadar(),
-        3: FDeckMicrowave(),
-        2: FDeckSatelliteDVTO(),
-        1: FDeckSatelliteDVTS(),
+        7: Analysis(),
+        6: Dropsonde(),
+        5: Aircraft(),
+        4: Radar(),
+        3: MicrowaveData(),
+        2: SatelliteDVTO(),
+        1: SatelliteDVTS(),
     }
     with opener(fname, "rt", newline="\n") as io_file:
         for line in io_file:
@@ -44,1095 +45,557 @@ def read_fdeck(fname: str) -> pd.DataFrame:
     return df
 
 
-class FDeckCommon:
+class FDeckCommon_(BaseDeck):
+    """Common fields for f-deck entries
+        Check https://www.nrlmry.navy.mil/atcf_web/docs/database/new/newfdeck.txt 
+        for more information
+    """
     def __init__(self):
-        self.data_store = {
-            "basin": {
-                "data": [],
-                "converter": categoricalconverter(),
-            },
-            "number": {
-                "data": [],
-            },
-            "datetime": {
-                "data": [],
-                "converter": datetimeconverter(datetime_format="%Y%m%d%H%M"),
-            },
-            "format": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "type": {
-                "data": [],
-            },
-            "ftype": {
-                "data": [],
-            },
-            "flag": {
-                "data": [],
-            },
-            "lat": {
-                "data": [],
-                "converter": latlonconverter(scale=0.01),
-            },
-            "lon": {
-                "data": [],
-                "converter": latlonconverter(scale=0.01),
-            },
-            "height": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "height_confidence": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "vmax": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "vmax_confidence": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "pressure": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "pressure_confidence": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "pressure_derivation": {
-                "data": [],
-            },
-            "rad": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "windcode": {
-                "data": [],
-            },
-            "rad1": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "rad2": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "rad3": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "rad4": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "rad_mod1": {
-                "data": [],
-            },
-            "rad_mod2": {
-                "data": [],
-            },
-            "rad_mod3": {
-                "data": [],
-            },
-            "rad_mod4": {
-                "data": [],
-            },
-            "radii_confidence": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "rmw": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "eye": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "subregion": {
-                "data": [],
-            },
-            "fix_identifier": {
-                "data": [],
-            },
-            "initials": {
-                "data": [],
-            },
-        }
-
-    def append(self, values):
-        for key, val in zip_longest(self.data_store.keys(), values, fillvalue=""):
-            self.data_store[key]["data"].append(val)
-
-    def to_dataframe(self):
-        raw_data = {
-            key: np.array(self.data_store[key]["data"], dtype=object) for key in self.data_store
-        }
-        for key, converter in self.data_store.items():
-            if "converter" in converter:
-                raw_data[key] = converter["converter"](raw_data[key])
-        return pd.DataFrame(raw_data)
-
-
-class FDeckSatelliteDVTO(FDeckCommon):
-    def __init__(self):
-        super().__init__()
-        self.data_store.update(
-            {
-                "dvto_sensor_type": {
-                    "data": [],
-                },
-                "dvto_ci_num": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "dvto_ci_confidence": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "dvto_t_num_mean": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "dvto_t_num_time_period": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "dvto_t_num_derivation": {
-                    "data": [],
-                },
-                "dvto_t_num_raw": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "dvto_temperature_eye": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "dvto_temperature_cloud": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "dvto_scene_type": {
-                    "data": [],
-                },
-                "dvto_algorithm": {
-                    "data": [],
-                },
-                "dvto_satellite_type": {
-                    "data": [],
-                    "converter": categoricalconverter(),
-
-                },
-                "dvto_tropical_indicator": {
-                    "data": [],
-                        "converter": categoricalconverter(),
-                },
-                "comments": {
-                    "data": [],
-                },
-            }
-        )
+        #: WP, IO, SH, CP, EP, AL, LS                  2 char.
+        self.basin: str = StringColumn()
+        #: annual cyclone number, 1-99,                    2 char.
+        self.number: int = NumericColumn()
+        #: Fix date-time-group,                 12 char.
+        self.datetime: datetime = DatetimeColumn(datetime_format="%Y%m%d%H%M")
+        #: 
+        #:* 10 - subjective dvorak |
+        #:* 20 - objective dvorak|
+        #:* 30 - microwave|
+        #:* 31 - scatterometer|
+        #:* 40 - radar|
+        #:* 50 - aircraft|
+        #:* 60 - dropsonde|
+        #:* 70 - analysis|
+        self.format: int = NumericColumn()
+        #: 4 char
+        #:
+        #: * DVTS - subjective Dvorak 
+        #: * DVTO - objective Dvorak 
+        #: * SSMI - Special Sensor Microwave Imager 
+        #: * SSMS - SSM/IS (Shared Processing Program) 
+        #: * QSCT - QuikSCAT 
+        #: * ERS2 - European Remote Sensing System scatterometer 
+        #: * SEAW - SeaWinds  scatterometer 
+        #: * TRMM - Tropical Rainfall Measuring Mission microwave and vis/ir imager 
+        #: * WIND - WindSat, polarimetric microwave radiometer 
+        #: * MMHS - Micorwave Humidity Sounder 
+        #: * ALTG - geosat altimeter 
+        #: * AMSU - Advanced Microwave Sounding Unit 
+        #: * RDRC - conventional radar 
+        #: * RDRD - doppler radar 
+        #: * RDRT - TRMM radar 
+        #: * SYNP - synoptic 
+        #: * AIRC - aircraft 
+        #: * ANAL - analysis 
+        #: * DRPS - dropsonde 
+        #: * UNKN - unknown 
+        self.type: str = StringColumn()
+        #: 10 char
+        #:
+        #: *  C-center fix, lat/lon specifies a center fix position,|
+        #: *  I-intensity fix, V specifies the max wind speed assoc. with the storm,|
+        #: *  R-wind radii fix,|
+        #: *  P-pressure, Pressure specifies central mean sea level pressure|
+        #: *  N-none,|
+        #: *  C, I, P, R, CI, CP, IP, CIP, N ...|
+        self.ftype: str = StringColumn()
+        #: 1 char
+        #: |  C-center location is flagged|
+        #: |  I-intensity is flagged|
+        #: |  R-wind radii is flagged|
+        #: |  P-pressure is flagged|
+        #: |  F-all of the above are flagged|
+        #: |  " "-fix is not flagged|
+        self.flag: str = StringColumn()
+        #:  N/S - Latitude (hundreths of degrees), 0-9000    5 char
+        #:  N/S is the hemispheric index
+        self.lat: float = LatLonColumn(scale=0.01)
+        #:E/W - Longitude (hundreths of degrees), 0-18000  6 char
+        #:  E/W is the hemispheric index
+        self.lon: float = LatLonColumn(scale=0.01)
+        #:of ob - 0-99999 meters                        5 char
+        self.height: int = NumericColumn()
+        #:  1-good, 2-fair, 3-poor            1 char
+        self.height_confidence: int = NumericColumn()
+        #: Wind speed (kts), 0 - 300 kts                    3 char
+        self.vmax: int = NumericColumn()
+        #: 1-good, 2-fair, 3-poor                1 char
+        self.vmax_confidence: int = NumericColumn()
+        #: Pressure, 0 - 1050 mb.                    4 char
+        self.pressure: int = NumericColumn()
+        #: 1-good, 2-fair, 3-poor         1 char
+        self.pressure_confidence: int = NumericColumn()
+        #: 4 char
+        #: | DVRK- dvorak |
+        #: | AKHL- atkinson-holiday table |
+        #: | XTRP- extrapolated |
+        #: | MEAS- measured         |
+        self.pressure_derivation: str = StringColumn()
+        #: Wind intensity (kts) - 34, 50, 64              3 char
+        #:  for the radii defined in this record
+        self.rad: int = NumericColumn()
+        #: Radius code                              4 char
+        #:   AAA - full circle
+        #:   NEQ - northeast quadrant
+        self.windcode: str = StringColumn()
+        #: If full circle, radius of specified wind intensity
+        #:Otherwise radius of specified wind intensity for northeast
+        #:quadrant of circle.  0 - 1200 nm.             4 char
+        self.rad1: int = NumericColumn()
+        #: Radius of specified wind intensity for 2nd quadrant
+        #:(southeast quadrant).  0 - 1200 nm.           4 char
+        self.rad2: int = NumericColumn()
+        #: Radius of specified wind intensity for 3rd quadrant
+        #:(southwest quadrant).  0 - 1200 nm.           4 char
+        self.rad3: int = NumericColumn()
+        #: Radius of specified wind intensity for 4th quadrant
+        #:(northwest quadrant).  0 - 1200 nm.           4 char
+        self.rad4: int = NumericColumn()
+        #: E-Edge of Pass, C-Cut off by Land, B-Both  1 char
+        self.rad_mod1: str = StringColumn()
+        #: E-Edge of Pass, C-Cut off by Land, B-Both  1 char
+        self.rad_mod2: str = StringColumn()
+        #: E-Edge of Pass, C-Cut off by Land, B-Both  1 char
+        self.rad_mod3: str = StringColumn()
+        #: E-Edge of Pass, C-Cut off by Land, B-Both  1 char
+        self.rad_mod4: str = StringColumn()
+        #: 1-good, 2-fair, 3-poor            1 char
+        self.radii_confidence: int = NumericColumn()
+        #: radius of max winds 0-999 nm                   3 char
+        self.rmw: int = NumericColumn()
+        #:  eye diameter, 0-120 nm.                        3 char
+        self.eye: int = NumericColumn()
+        #:  subregion code W,A,B,S,P,C,E,L,Q        1 char
+        #: | A - Arabian Sea |
+        #: | B - Bay of Bengal |
+        #: | C - Central Pacific |
+        #: | E - Eastern Pacific |
+        #: | L - Atlantic |
+        #: | P - South Pacific (135E - 120W) |
+        #: | Q - South Atlantic |
+        #: | S - South IO (20E - 135E) |
+        #: | W - Western Pacific |
+        self.subregion: str = StringColumn()
+        #:                            5 char
+        self.fix_identifier: str = StringColumn()
+        #: (fix enterer) -                             3 char
+        self.initials: str = StringColumn()
 
 
-class FDeckMicrowave(FDeckCommon):
+
+class SatelliteDVTS(FDeckCommon_):
+    """Extra Satellite DVTS data columns
+    
+        These columns will added to the 32 common columns of :py:class:`FDeckCommon_`
+    """
     def __init__(self):
         super().__init__()
-        self.data_store.update(
-            {
-                "microwave_rain_flagged": {
-                    "data": [],
-                },
-                "microwave_rainrate": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_process": {
-                    "data": [],
-                },
-                "microwave_wave_height": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_temp": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_slp_raw": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_slp_retrieved": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_max_meas": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_satellite": {
-                    "data": [],
-                },
-                "microwave_rad_kt": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_windcode": {
-                    "data": [],
-                },
-                "microwave_rad1": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_rad2": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_rad3": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_rad4": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_rad5": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_rad6": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_rad7": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_rad8": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "microwave_rad_mod1": {
-                    "data": [],
-                },
-                "microwave_rad_mod2": {
-                    "data": [],
-                },
-                "microwave_rad_mod3": {
-                    "data": [],
-                },
-                "microwave_rad_mod4": {
-                    "data": [],
-                },
-                "microwave_rad_mod5": {
-                    "data": [],
-                },
-                "microwave_rad_mod6": {
-                    "data": [],
-                },
-                "microwave_rad_mod7": {
-                    "data": [],
-                },
-                "microwave_rad_mod8": {
-                    "data": [],
-                },
-                "microwave_radii_confidence": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "comments": {
-                    "data": [],
-                },
-            }
-        )
+        #: Sensor type - vis, ir, microwave... 4 char.
+        #:                 V, I, M, VI, IM, VM, VIM
+        self.dvts_sensor_type: str = StringColumn()
+        #: PCN code (deprecated) 1 char.
+        #:
+        #: * V, I, M, VI, IM, VM, VIM
+        #: * 1 = Eye/Geography
+        #: * 2 = Eye/Ephemeris
+        #: * 3 = Well Defined Circ. Center/Geography
+        #: * 4 = Well Definged Circ. Center/Ephemeris
+        #: * 5 = Poorly Defined Circ. Center/Geography
+        #: * 6 = Poorly Defined Circ. Center/Ephemeris
+        self.dvts_pcn_code: str = StringColumn()
+        #: Dvorak code - long term trend,                10 char.
+        #:
+        #: | (18-30 hour change in t-number)
+        #: | T num, none or 0.0 - 8.0
+        #: | CI num, none or 0.0 - 8.0
+        #: | Forecast intensity change, + - or blank
+        #: | Past change - developed, steady, weakened (long term trend)
+        #: | Amount of t num change, none or 0.0 - 8.0
+        #: | Hours since previous eval,  18 - 30 HRS
+        #: | Example: T4.0/4.0+/D1.0/24HRS
+        self.dvts_dvorak_code_long: str = StringColumn()
+        #: Dvorak code - short term trend,                5 char.
+        #:
+        #: | ( < 18 hour change in t-number.  Only used when  
+        #:   significant difference from long term trend, i.e.,
+        #:   LTT is +1.0 strengthening, but STT over 6 hours
+        #:   shows - 0.5 weakening.)
+        #: | Past change - developed, steady, weakened (short term trend)
+        #: | Amount of t num change, none or 0.0 - 8.0
+        #: | Hours since previous eval,  0 - 17 HRS
+        #: | Example: W0.5/06HRS
+        self.dvts_dvorak_code_short: str = StringColumn()
+        #: CI 24 hr forecast - none or 0.0 - 8.0          2 char.
+        self.dvts_ci_24hr_forecast: float = NumericColumn()
+        #: Satellite type -                               6 char.
+        #:    GMS, DMSP, DMSP45, TRMM, NOAA...
+        self.satellite_type: str = StringColumn()
+        #: Center type - CSC, LLCC, ULCC                  4 char.
+        #:
+        #: * LLCC - lower level cloud center
+        #: * ULCC - upper level cloud center
+        #: * CSC - cloud system center
+        self.dvts_center_type: str = StringColumn()
+        #: Tropical indicator -   S,E,T       1 char.
+        #:
+        #: * S-subtropical
+        #: * E-extratropical
+        #: * T-tropical
+        self.dvts_tropical_indicator: str = StringColumn()
+        #:                                     52 char
+        self.comments: str = StringColumn()
 
 
-class FDeckRadar(FDeckCommon):
+class SatelliteDVTO(FDeckCommon_):
+    # """Extra Satellite DVTO data columns
+    # DVTO -- Objective dvorak technique Data (IR)
+
+    # Attributes
+    # ----------
+    # dvto_sensor_type: string
+    #             - vis, ir, microwave...            4 char.
+    #               V, I, M, VI, IM, VM, VIM
+    # dvto_ci_num:
+    #     -                                       2 char.
+    # dvto_ci_confidence:
+    #     CI confidence - 1-good, 2-fair, 3-poor,        1 char.
+    # dvto_t_num_mean:
+    #     T num (average)                                2 char.
+    # dvto_t_num_time_period:
+    #     T num averaging time period - hours            3 char.
+    # dvto_t_num_derivation:
+    #     T num averaging derivation -                   1 char.
+    #            L-straight linear, T-time weighted
+    # dvto_t_num_raw:
+    #     T num (raw)                                    2 char.
+    # dvto_temperature_eye:
+    #     Temperature (eye), -99 - 50 celsius            4 char.
+    # dvto_temperature_cloud:
+    #     Temperature (cloud surrounding eye) - celsius  4 char.
+    # dvto_scene_type:
+    #     Scene type -  CDO, EYE, EEYE, SHER...          4 char.
+    #          CDO - central dense overcast
+    #          EYE - definable eye
+    #          EMBC - embedded center
+    #          SHER - partially exposed eye due to strong wind shear 
+    #                 with asymmetric convective structure
+    # dvto_algorithm:
+    #     Algorithm (Rule 9 flag, Rapid flag) - R9, RP   2 char.
+    # dvto_satellite_type:
+    #     Satellite type -                               6 char.
+    #              GMS, DMSP, DMSP45, TRMM, NOAA...
+    # dvto_tropical_indicator:
+    #     Tropical indicator -                           1 char.
+    #          S-subtropical, E-extratropical, T-tropical
+    # comments:
+    #     Comments -                                    52 char.
+    # """
     def __init__(self):
         super().__init__()
-        self.data_store.update(
-            {
-                "radar_type": {
-                    "data": [],
-                },
-                "radar_format": {
-                    "data": [],
-                },
-                "radob_code": {
-                    "data": [],
-                },
-                "eye_shape": {
-                    "data": [],
-                },
-                "radar_percent_of_eye_wall_observed": {
-                    "data": [],
-                },
-                "radar_spiral_overlay": {
-                    "data": [],
-                },
-                "radar_site_position_lat": {
-                    "data": [],
-                    "converter": latlonconverter(scale=0.01),
-                },
-                "radar_site_position_lon": {
-                    "data": [],
-                    "converter": latlonconverter(scale=0.01),
-                },
-                "radar_inbound_max_wind": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "radar_inbound_max_wind_azimuth": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "radar_inbound_max_wind_range": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "radar_inbound_max_wind_elevation": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "radar_outbound_max_wind": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "radar_outbound_max_wind_azimuth": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "radar_outbound_max_wind_range": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "radar_outbound_max_wind_elevation": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "radar_max_cloud_height": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "radar_max_rain_accumulation": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "radar_max_rain_accumulation_time_interval": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "radar_max_rain_accumulation_lat": {
-                    "data": [],
-                    "converter": latlonconverter(scale=0.01),
-                },
-                "radar_max_rain_accumulation_lon": {
-                    "data": [],
-                    "converter": latlonconverter(scale=0.01),
-                },
-                "comments": {
-                    "data": [],
-                },
-            }
-        )
+        self.dvto_sensor_type: str = StringColumn()
+        # - vis, ir, microwave...            4 char.
+        # V_ I, M, VI, IM, VM, VIM
+        self.dvto_ci_num: int = NumericColumn()
+        # -                                       2 char.
+        self.dvto_ci_confidence: int = NumericColumn()
+        # - 1-good, 2-fair, 3-poor,        1 char.
+        self.dvto_t_num_mean: int = NumericColumn()
+        #  (average)                                2 char.
+        self.dvto_t_num_time_period: int = NumericColumn()
+        # - hours            3 char.
+        self.dvto_t_num_derivation: str = StringColumn()
+        # -                   1 char.
+        # L_straight linear, T-time weighted
+        self.dvto_t_num_raw: int = NumericColumn()
+        # (raw)                                    2 char.
+        self.dvto_temperature_eye: int = NumericColumn()
+        # , -99 - 50 celsius            4 char.
+        self.dvto_temperature_cloud: int = NumericColumn()
+        # surrounding eye) - celsius  4 char.
+        self.dvto_scene_type: str = StringColumn()
+        # -  CDO, EYE, EEYE, SHER...          4 char.
+        # CDO_- central dense overcast
+        # EYE_- definable eye
+        # EMBC_- embedded center
+        # SHER_- partially exposed eye due to strong wind shear
+        # with_asymmetric convective structure
+        self.dvto_algorithm: str = StringColumn()
+        # _(Rule 9 flag, Rapid flag) - R9, RP   2 char.
+        self.dvto_satellite_type: str = StringColumn()
+        # -                               6 char.
+        # GMS_ DMSP, DMSP45, TRMM, NOAA...
+        self.dvto_tropical_indicator: str = StringColumn()
+        # -                           1 char.
+        # S_subtropical, E-extratropical, T-tropical
+        self.comments: str = StringColumn()
+        # -                                    52 char.
 
 
-class FDeckAircraft(FDeckCommon):
+class MicrowaveData(FDeckCommon_):
+    """Extra Satellite DVTS data columns
+    
+        These columns will added to the 32 common columns of :py:class:`FDeckCommon_`
+    """
+
     def __init__(self):
         super().__init__()
-        self.data_store.update(
-            {
-                "aircraft_flight_level_ft": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_flight_level_hpa": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_minimum_height": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_max_surface_wind_intensity": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_max_surface_wind_bearing": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_max_surface_wind_range": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_max_fl_wind_direction": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_max_fl_wind_intensity": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_max_fl_wind_bearing": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_max_fl_wind_range": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_mean_slp": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_temperature_outside_eye": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_temperature_inside_eye": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_dew_point_temperature": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_sea_surface_temperature": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_eye_character": {
-                    "data": [],
-                },
-                "aircraft_shape": {
-                    "data": [],
-                },
-                "aircraft_orientation": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_diameter": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_short_axis": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_navigational_accuracy": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_meteorological_accuracy": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "aircraft_mission_number": {
-                    "data": [],
-                },
-                "comments": {
-                    "data": [],
-                },
-            }
-        )
+        # SSMI, TRMM, AMSU, ADOS, ALTI, ERS2, QSCT, SEAW -- MICROWAVE
+        self.microwave_rain_flagged: str = StringColumn()
+        """ "R" or blank                    1 char."""
+        self.microwave_rainrate: int = NumericColumn()
+        """   0-500 mm/h                        3 char."""
+        self.microwave_process: str = StringColumn()
+        """                                      6 char.
+          FNMOC algorithm, NESDIS algorithm, RSS..."""
+        self.microwave_wave_height: int = NumericColumn()
+        """(active micr) - 0-99 ft            2 char."""
+        self.microwave_temp: int = NumericColumn()
+        """(passive micr) - celsius                  4 char."""
+        self.microwave_slp_raw: int = NumericColumn()
+        """(raw, AMSU only) - mb                      4 char."""
+        self.microwave_slp_retrieved: int = NumericColumn()
+        """(retrieved, AMSU only) - mb                4 char."""
+        self.microwave_max_meas: int = NumericColumn()
+        """ (alti) 0-999 ft.                    3 char."""
+        self.microwave_satellite: str = StringColumn()
+        """ type -                               6 char.
+           GMS, DMSP, DMSP45, TRMM, NOAA..."""
+        self.microwave_rad_kt: int = NumericColumn()
+        """ Wind intensity (kts) - 34, 50, 64        3 char.
+        for the radii defined in this record."""
+        self.microwave_windcode: str = StringColumn()
+        """ Radius code:                        4 char.
+        
+          * AAA - full circle
+          * quadrant designations -  NEQ - northeast quadrant
+          * octant designations: (*NNEO, ENEO, ESEO, SSEO, SSWO, WSWO, WNWO NNWO)"""
+        self.microwave_rad1: int = NumericColumn()
+        """ If full circle, radius of specified wind intensity.  Otherwise
+         radius of specified wind intensity of wind intensity of circle
+         portion specified in windcode.  0 - 1200 nm.  4 char."""
+        self.microwave_rad2: int = NumericColumn()
+        """ Radius of specified wind intensity for 2nd quadrant/octant
+          (counting clockwise from quadrant specified in windcode).
+          0 - 1200 nm.                                  4 char."""
+        self.microwave_rad3: int = NumericColumn()
+        """ As :py:attr:`microwave_rad2` for 3rd quadrant/octant"""
+        self.microwave_rad4: int = NumericColumn()
+        """ As :py:attr:`microwave_rad2` for 4th quadrant/octant"""
+        self.microwave_rad5: int = NumericColumn()
+        """ As :py:attr:`microwave_rad2` for 5th octant"""
+        self.microwave_rad6: int = NumericColumn()
+        """ As :py:attr:`microwave_rad2` for 6th octant"""
+        self.microwave_rad7: int = NumericColumn()
+        """ As :py:attr:`microwave_rad2` for 7th octant"""
+        self.microwave_rad8: int = NumericColumn()
+        """ As :py:attr:`microwave_rad2` for 8th octant"""
+        self.microwave_rad_mod1: str = StringColumn()
+        """ Flag for the respective radii   - 1 char
+
+         * E-Edge of Pass, 
+         * C-Cut off by Land,
+         * B-Both"""
+        self.microwave_rad_mod2: str = StringColumn()
+        """As :py:attr:`microwave_rad_mod1`"""
+        self.microwave_rad_mod3: str = StringColumn()
+        """As :py:attr:`microwave_rad_mod1`"""
+        self.microwave_rad_mod4: str = StringColumn()
+        """As :py:attr:`microwave_rad_mod1`"""
+        self.microwave_rad_mod5: str = StringColumn()
+        """As :py:attr:`microwave_rad_mod1`"""
+        self.microwave_rad_mod6: str = StringColumn()
+        """As :py:attr:`microwave_rad_mod1`"""
+        self.microwave_rad_mod7: str = StringColumn()
+        """As :py:attr:`microwave_rad_mod1`"""
+        self.microwave_rad_mod8: str = StringColumn()
+        """As :py:attr:`microwave_rad_mod1`"""
+        self.microwave_radii_confidence: int = NumericColumn()
+        """# confidence - 1-good, 2-fair, 3-poor        1 char."""
+        self.comments: str = StringColumn()  
+        """# -                                    52 char."""
 
 
-class FDeckDropsonde(FDeckCommon):
+class Radar(FDeckCommon_):
+    "Extra Radar data columns"
     def __init__(self):
         super().__init__()
-        self.data_store.update(
-            {
-                "drop_environment": {
-                    "data": [],
-                },
-                "drop_height_of_midpoint": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "drop_windspeed_150m": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "drop_windspeed_500m": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "comments": {
-                    "data": [],
-                },
-            }
-        )
+        # RDRC, RDRD, RDRT -- Radar, Conventional, Doppler and TRMM
+        self.radar_type: str = StringColumn()
+        #:                                    1 char.
+        # L - Land; S - Ship; A - Aircraft; T - Satellite
+        self.radar_format: str = StringColumn()
+        #:                                  1 char.
+        # R - RADOB; P - plain language; D - Doppler
+        self.radob_code: str = StringColumn()
+        # - A S W a r t d d f f              10 char.
+        # c c c c t e s s s s
+        # See description below.
+        # Also enter slashes if reported and in place of blanks.
+        self.eye_shape: str = StringColumn()
+        # -                                    2 char.
+        # CI - Circular; EL - Elliptic; CO - concentric
+        self.radar_percent_of_eye_wall_observed: int = NumericColumn()
+        # (99 = 100%) -     2 char.
+        self.radar_spiral_overlay: int = NumericColumn()
+        # (degrees) -                     2 char.
+        self.radar_site_position_lat: float = LatLonColumn(scale=0.01)
+        # N/S -                  5 char.
+        self.radar_site_position_lon: float = LatLonColumn(scale=0.01)
+        # E/W -                  6 char.
+        self.radar_inbound_max_wind: int = NumericColumn()
+        # - 0-300 kts                   3 char.
+        self.radar_inbound_max_wind_azimuth: int = NumericColumn()
+        # - degrees, 1-360                    3 char.
+        self.radar_inbound_max_wind_range: int = NumericColumn()
+        # - less than 400 nm,                   3 char.
+        self.radar_inbound_max_wind_elevation: int = NumericColumn()
+        # - feet                            5 char.
+        self.radar_outbound_max_wind: int = NumericColumn()
+        # - 0-300 kts                  3 char.
+        self.radar_outbound_max_wind_azimuth: int = NumericColumn()
+        # - degrees, 1-360                    3 char.
+        self.radar_outbound_max_wind_range: int = NumericColumn()
+        # - less than 400 nm,                   3 char.
+        self.radar_outbound_max_wind_elevation: int = NumericColumn()
+        # - feet                            5 char.
+        self.radar_max_cloud_height: int = NumericColumn()
+        # (trmm radar) - 70,000ft       5 char.
+        # Rain accumulation:
+        self.radar_max_rain_accumulation: int = NumericColumn()
+        # , hundreths of inches 0-10000 5 char.
+        self.radar_max_rain_accumulation_time_interval: int = NumericColumn()
+        # , 1 - 120 hours                 3 char.
+        self.radar_max_rain_accumulation_lat: float = LatLonColumn(scale=0.01)
+        # N/S - Latitude (hundreths of degrees), 0-9000   5 char.
+        # N/S is the hemispheric index.
+        self.radar_max_rain_accumulation_lon: float = LatLonColumn(scale=0.01)
+        # E/W - Longitude (hundreths of degrees), 0-18000 6 char.
+        # E/W is the hemispheric index.
+        self.comments: str = StringColumn()
+        #  -                                    52 char.
 
 
-class FDeckAnalysis(FDeckCommon):
+class Aircraft(FDeckCommon_):
     def __init__(self):
         super().__init__()
-        self.data_store.update(
-            {
-                "analysis_analyst": {
-                    "data": [],
-                },
-                "analysis_start_time": {
-                    "data": [],
-                    "converter": datetimeconverter(datetime_format="%Y%m%d%H%M"),
-                },
-                "analysis_end_time": {
-                    "data": [],
-                    "converter": datetimeconverter(datetime_format="%Y%m%d%H%M"),
-                },
-                "analysis_distance_data": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "analysis_sst": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "analysis_sources": {
-                    "data": [],
-                },
-                "comments": {
-                    "data": [],
-                },
-            }
-        )
+        "Extra Aircraft data columns"
+        # flight_level: str #
+        self.aircraft_flight_level_ft: int = NumericColumn()
+        # - 100's of feet                2 char.
+        self.aircraft_flight_level_hpa: int = NumericColumn()
+        # - millibars                    3 char.
+        self.aircraft_minimum_height: int = NumericColumn()
+        # - meters                     4 char.
+        # msw: str # # (inbound leg)
+        self.aircraft_max_surface_wind_intensity: int = NumericColumn()
+        # - kts                             3 char.
+        self.aircraft_max_surface_wind_bearing: int = NumericColumn()
+        # - degrees                           3 char.
+        self.aircraft_max_surface_wind_range: int = NumericColumn()
+        # - nm                                  3 char.
+        # mflw: str # # (inbound leg)
+        self.aircraft_max_fl_wind_direction: int = NumericColumn()
+        # - degrees                         3 char.
+        self.aircraft_max_fl_wind_intensity: int = NumericColumn()
+        # - kts                             3 char.
+        self.aircraft_max_fl_wind_bearing: int = NumericColumn()
+        # - degrees                           3 char.
+        self.aircraft_max_fl_wind_range: int = NumericColumn()
+        # - nm                                  3 char.
+        self.aircraft_mean_slp: int = NumericColumn()
+        # # - millibars         4 char.
+        self.aircraft_temperature_outside_eye: int = NumericColumn()
+        #  -99 to 99 Celsius     3 char.
+        self.aircraft_temperature_inside_eye: int = NumericColumn()
+        #   -99 to 99 Celsius     3 char.
+        self.aircraft_dew_point_temperature: int = NumericColumn()
+        #    -99 to 99 Celsius     3 char.
+        self.aircraft_sea_surface_temperature: int = NumericColumn()
+        #    0 to 40 Celsius     2 char.
+        self.aircraft_eye_character: str = StringColumn()
+        # #or Wall Cld Thickness (pre-2015) 2 char.
+        #  NA - < 50% eyewall
+        #  CL - Closed Wall
+        #  PD - Poorly Defined
+        #  N  - open North
+        #  NE - open Northeast
+        #  E  - open East
+        #  SE - open Southeast
+        #  S  - open South
+        #  SW - open Southwest
+        #  W  - open West
+        #  NW - open Northwest
+        #  SB - spiral band
+        #   Eye Shape/Orientation/Diameter
+        self.aircraft_shape: str = StringColumn()
+        #: #CI-circ.; EL-elliptic; CO-concentric 2 char.
+        self.aircraft_orientation: int = NumericColumn()
+        # #- degrees                       3 char.
+        self.aircraft_diameter: int = NumericColumn()
+        # #(long axis if elliptical) - nm     2 char.
+        self.aircraft_short_axis: int = NumericColumn()
+        # #(blank if not elliptical) - nm   2 char.
+        self.aircraft_navigational_accuracy: int = NumericColumn()
+        # #- tenths of nm                 3 char.
+        self.aircraft_meteorological_accuracy: int = NumericColumn()
+        ## - tenths of nm               3 char.
+        self.aircraft_mission_number: str = StringColumn()
+        # #                                 2 char.
+        self.comments: str = StringColumn()
+        # #-                                    52 char.
+        # extra: str
 
 
-class FDeckSatelliteDVTS(FDeckCommon):
+class Dropsonde(FDeckCommon_):
     def __init__(self):
         super().__init__()
-        self.data_store.update(
-            {
-                "dvts_sensor_type": {
-                    "data": [],
-                    "converter": categoricalconverter(),
-                },
-                "dvts_pcn_code": {
-                    "data": [],
-                    "converter": categoricalconverter(),
-                },
-                "dvts_dvorak_code_long": {
-                    "data": [],
-                },
-                "dvts_dvorak_code_short": {
-                    "data": [],
-                },
-                "dvts_ci_24hr_forecast": {
-                    "data": [],
-                    "converter": int_converter(),
-                },
-                "satellite_type": {
-                    "data": [],
-                },
-                "dvts_center_type": {
-                    "data": [],
-                },
-                "dvts_tropical_indicator": {
-                    "data": [],
-                },
-                "comments": {
-                    "data": [],
-                },
-            }
-        )
+        "Extra Dropsonde data columns"
+        self.drop_environment: str = StringColumn()
+        # -                           10 char.
+        # EYEWALL, EYE, RAINBAND, MXWNDBND, SYNOPTIC
+        self.drop_height_of_midpoint: int = NumericColumn()
+        # meters (75 - 999 m)                          3 char.
+        self.drop_windspeed_150m: int = NumericColumn()
+        # of drop - kts 3 char.
+        self.drop_windspeed_500m: int = NumericColumn()
+        # - kts        3 char.
+        self.comments: str = StringColumn()
+        # -                                    52 char.
 
 
-# @dataclass
-# class CommonFields:
-#     """Common fields for f-deck entries"""
-
-#     basin: str = StrConverter()
-#     # WP, IO, SH, CP, EP, AL, LS                  2 char.
-#     number: int = IntConverter()
-#     # - annual cyclone number, 1-99,                    2 char.
-#     datetime: datetime = DatetimeConverter(datetime_format="%Y%m%d%H%M")
-#     # = Fix date-time-group,                 12 char.
-#     format: int = IntConverter()
-#     # IntConvertor #= IntConvertor(default=0)
-#     # - 10 - subjective dvorak                  3 char.
-#     #  20 - objective dvorak
-#     #  30 - microwave
-#     #  31 - scatterometer
-#     #  40 - radar
-#     #  50 - aircraft
-#     #  60 - dropsonde
-#     #  70 - analysis
-#     type: str = StrConverter()
-#     #    DVTS - subjective Dvorak                  4 char.
-#     #    DVTO - objective Dvorak
-#     #    SSMI - Special Sensor Microwave Imager
-#     #    SSMS - SSM/IS (Shared Processing Program)
-#     #    QSCT - QuikSCAT
-#     #    ERS2 - European Remote Sensing System scatterometer
-#     #    SEAW - SeaWinds  scatterometer
-#     #    TRMM - Tropical Rainfall Measuring Mission microwave and vis/ir imager
-#     #    WIND - WindSat, polarimetric microwave radiometer
-#     #    MMHS - Micorwave Humidity Sounder
-#     #    ALTG - geosat altimeter
-#     #    AMSU - Advanced Microwave Sounding Unit
-#     #    RDRC - conventional radar
-#     #    RDRD - doppler radar
-#     #    RDRT - TRMM radar
-#     #    SYNP - synoptic
-#     #    AIRC - aircraft
-#     #    ANAL - analysis
-#     #    DRPS - dropsonde
-#     #    UNKN - unknown
-#     ftype: str = StrConverter()
-#     # -                                  10 char.
-#     #   C-center fix, lat/lon specifies a center fix position,
-#     #   I-intensity fix, V specifies the max wind speed assoc. with the storm,
-#     #   R-wind radii fix,
-#     #   P-pressure, Pressure specifies central mean sea level pressure
-#     #   N-none,
-#     #   C, I, P, R, CI, CP, IP, CIP, N ...
-#     flag: str = StrConverter()
-#     # -                                  1 char.
-#     #   C-center location is flagged,
-#     #   I-intensity is flagged,
-#     #   R-wind radii is flagged,
-#     #   P-pressure is flagged,
-#     #   F-all of the above are flagged,
-#     #   " "-fix is not flagged.
-#     lat: float = LatLonConverter(scale=0.01)
-#     # N/S - Latitude (hundreths of degrees), 0-9000    5 char.
-#     #   N/S is the hemispheric index.
-#     lon: float = LatLonConverter(scale=0.01)
-#     # E/W - Longitude (hundreths of degrees), 0-18000  6 char.
-#     #   E/W is the hemispheric index.
-#     height: int = IntConverter()
-#     # of ob - 0-99999 meters                        5 char.
-#     height_confidence: int = IntConverter()
-#     #  - 1-good, 2-fair, 3-poor            1 char.
-#     vmax: int = IntConverter()
-#     # - Wind speed (kts), 0 - 300 kts                    3 char.
-#     vmax_confidence: int = IntConverter()
-#     # - 1-good, 2-fair, 3-poor                1 char.
-#     pressure: int = IntConverter()
-#     # - Pressure, 0 - 1050 mb.                    4 char.
-#     pressure_confidence: int = IntConverter()
-#     # - 1-good, 2-fair, 3-poor         1 char.
-#     pressure_derivation: str = StrConverter()
-#     # -                                4 char.
-#     #   DVRK - dvorak,
-#     #   AKHL - atkinson-holiday table,
-#     #   XTRP - extrapolated,
-#     #   MEAS - measured,
-#     rad: int = IntConverter()
-#     #  - Wind intensity (kts) - 34, 50, 64              3 char.
-#     #   for the radii defined in this record.
-#     windcode: str = StrConverter()
-#     # - Radius code:                              4 char.
-#     #    AAA - full circle
-#     #    NEQ - northeast quadrant
-#     rad1: int = IntConverter()
-#     # - If full circle, radius of specified wind intensity.
-#     # Otherwise radius of specified wind intensity for northeast
-#     # quadrant of circle.  0 - 1200 nm.             4 char.
-#     rad2: int = IntConverter()
-#     # - Radius of specified wind intensity for 2nd quadrant
-#     # (southeast quadrant).  0 - 1200 nm.           4 char.
-#     rad3: int = IntConverter()
-#     # - Radius of specified wind intensity for 3rd quadrant
-#     # (southwest quadrant).  0 - 1200 nm.           4 char.
-#     rad4: int = IntConverter()
-#     # - Radius of specified wind intensity for 4th quadrant
-#     # (northwest quadrant).  0 - 1200 nm.           4 char.
-#     rad_mod1: str = StrConverter()
-#     # - E-Edge of Pass, C-Cut off by Land, B-Both  1 char.
-#     rad_mod2: str = StrConverter()
-#     # - E-Edge of Pass, C-Cut off by Land, B-Both  1 char.
-#     rad_mod3: str = StrConverter()
-#     # - E-Edge of Pass, C-Cut off by Land, B-Both  1 char.
-#     rad_mod4: str = StrConverter()
-#     # - E-Edge of Pass, C-Cut off by Land, B-Both  1 char.
-#     radii_confidence: int = IntConverter()
-#     # - 1-good, 2-fair, 3-poor            1 char.
-#     rmw: int = IntConverter()
-#     # - radius of max winds 0-999 nm                   3 char.
-#     eye: int = IntConverter()
-#     # - eye diameter, 0-120 nm.                        3 char.
-#     subregion: str = StrConverter()
-#     # - subregion code: W,A,B,S,P,C,E,L,Q        1 char.
-#     # A - Arabian Sea
-#     # B - Bay of Bengal
-#     # C - Central Pacific
-#     # E - Eastern Pacific
-#     # L - Atlantic
-#     # P - South Pacific (135E - 120W)
-#     # Q - South Atlantic
-#     # S - South IO (20E - 135E)
-#     # W - Western Pacific
-#     fix_identifier: str = StrConverter()
-#     # -                            5 char.
-#     initials: str = StrConverter()
-#     # (fix enterer) -                             3 char.
-
-
-# @dataclass
-# class SatelliteDVTS(CommonFields):
-#     "Extra Satellite DVTS data columns"
-#     dvts_sensor_type: str = StrConverter()
-#     # - vis, ir, microwave...            4 char.
-#     dvts_pcn_code: str = StrConverter()
-#     # (deprecated) -                        1 char.
-#     # V, I, M, VI, IM, VM, VIM
-#     #  1 = Eye/Geography
-#     #  2 = Eye/Ephemeris
-#     #  3 = Well Defined Circ. Center/Geography
-#     #  4 = Well Definged Circ. Center/Ephemeris
-#     #  5 = Poorly Defined Circ. Center/Geography
-#     dvts_dvorak_code_long: str = StrConverter()
-#     # - long term trend,                10 char.
-#     #  6 = Poorly Defined Circ. Center/Ephemeris
-#     #  (18-30 hour change in t-number)
-#     #  T num, none or 0.0 - 8.0
-#     #  CI num, none or 0.0 - 8.0
-#     #  Forecast intensity change, + - or blank
-#     #  Past change - developed, steady, weakened (long term trend)
-#     #  Amount of t num change, none or 0.0 - 8.0
-#     #  Hours since previous eval,  18 - 30 HRS
-#     #  Example: T4.0/4.0+/D1.0/24HRS
-#     dvts_dvorak_code_short: str = StrConverter()
-#     # - short term trend,                5 char.
-#     #  Entry: 4040+D1024
-#     #  ( < 18 hour change in t-number.  Only used when
-#     #    significant difference from long term trend, i.e.,
-#     #    LTT is +1.0 strengthening, but STT over 6 hours
-#     #    shows - 0.5 weakening.)
-#     #  Past change - developed, steady, weakened (short term trend)
-#     #  Amount of t num change, none or 0.0 - 8.0
-#     #  Hours since previous eval,  0 - 17 HRS
-#     #  Example: W0.5/06HRS
-#     dvts_ci_24hr_forecast: float = FloatConverter()
-#     # - none or 0.0 - 8.0          2 char.
-#     #  Entry: W0506
-#     satellite_type: str = StrConverter()
-#     # -                               6 char.
-#     dvts_center_type: str = StrConverter()
-#     # - CSC, LLCC, ULCC                  4 char.
-#     #    GMS, DMSP, DMSP45, TRMM, NOAA...
-#     #    LLCC - lower level cloud center
-#     #    ULCC - upper level cloud center
-#     dvts_tropical_indicator: str = StrConverter()
-#     # -                           1 char.
-#     #    CSC - cloud system center
-#     comments: str = StrConverter()
-#     # -                                    52 char.
-#     #    S-subtropical, E-extratropical, T-tropical
-
-
-# @dataclass
-# class SatelliteDVTO(CommonFields):
-#     "Extra Satellite DVTO data columns"
-#     dvto_sensor_type: str = StrConverter()
-#     # - vis, ir, microwave...            4 char.
-#     # V_ I, M, VI, IM, VM, VIM
-#     dvto_ci_num: int = IntConverter()
-#     # -                                       2 char.
-#     dvto_ci_confidence: int = IntConverter()
-#     # - 1-good, 2-fair, 3-poor,        1 char.
-#     dvto_t_num_mean: int = IntConverter()
-#     #  (average)                                2 char.
-#     dvto_t_num_time_period: int = IntConverter()
-#     # - hours            3 char.
-#     dvto_t_num_derivation: str = StrConverter()
-#     # -                   1 char.
-#     # L_straight linear, T-time weighted
-#     dvto_t_num_raw: int = IntConverter()
-#     # (raw)                                    2 char.
-#     dvto_temperature_eye: int = IntConverter()
-#     # , -99 - 50 celsius            4 char.
-#     dvto_temperature_cloud: int = IntConverter()
-#     # surrounding eye) - celsius  4 char.
-#     dvto_scene_type: str = StrConverter()
-#     # -  CDO, EYE, EEYE, SHER...          4 char.
-#     # CDO_- central dense overcast
-#     # EYE_- definable eye
-#     # EMBC_- embedded center
-#     # SHER_- partially exposed eye due to strong wind shear
-#     # with_asymmetric convective structure
-#     dvto_algorithm: str = StrConverter()
-#     # _(Rule 9 flag, Rapid flag) - R9, RP   2 char.
-#     dvto_satellite_type: str = StrConverter()
-#     # -                               6 char.
-#     # GMS_ DMSP, DMSP45, TRMM, NOAA...
-#     dvto_tropical_indicator: str = StrConverter()
-#     # -                           1 char.
-#     # S_subtropical, E-extratropical, T-tropical
-#     dvto_comments: str = StrConverter()
-#     # -                                    52 char.
-
-
-# @dataclass
-# class MicrowaveData(CommonFields):
-#     "Extra Microwave data columns"
-#     # SSMI, TRMM, AMSU, ADOS, ALTI, ERS2, QSCT, SEAW -- MICROWAVE
-#     microwave_rain_flagged: str = StrConverter()
-#     # - "R" or blank                    1 char.
-#     microwave_rainrate: int = IntConverter()
-#     # -   0-500 mm/h                        3 char.
-#     microwave_process: str = StrConverter()
-#     # -                                      6 char.
-#     #  FNMOC algorithm, NESDIS algorithm, RSS...
-#     microwave_wave_height: int = IntConverter()
-#     ## (active micr) - 0-99 ft            2 char.
-#     microwave_temp: int = IntConverter()
-#     # (passive micr) - celsius                  4 char.
-#     microwave_slp_raw: int = IntConverter()
-#     # (raw, AMSU only) - mb                      4 char.
-#     microwave_slp_retrieved: int = IntConverter()
-#     # (retrieved, AMSU only) - mb                4 char.
-#     microwave_max_meas: int = IntConverter()
-#     # - (alti) 0-999 ft.                    3 char.
-#     microwave_satellite: str = StrConverter()
-#     # type -                               6 char.
-#     #    GMS, DMSP, DMSP45, TRMM, NOAA...
-#     microwave_rad_kt: int = IntConverter()
-#     # - Wind intensity (kts) - 34, 50, 64        3 char.
-#     # for the radii defined in this record.
-#     microwave_windcode: str = StrConverter()
-#     # - Radius code:                        4 char.
-#     #    AAA - full circle
-#     #   quadrant designations:
-#     #    NEQ - northeast quadrant
-#     #   octant designations:
-#     #    XXXO - octants (NNEO, ENEO, ESEO, SSEO, SSWO, WSWO, WNWO NNWO)
-#     microwave_rad1: int = IntConverter()
-#     # - If full circle, radius of specified wind intensity.  Otherwise
-#     #  radius of specified wind intensity of wind intensity of circle
-#     #  portion specified in windcode.  0 - 1200 nm.  4 char.
-#     microwave_rad2: int = IntConverter()
-#     # - Radius of specified wind intensity for 2nd quadrant/octant
-#     #  (counting clockwise from quadrant specified in windcode).
-#     #  0 - 1200 nm.                                  4 char.
-#     microwave_rad3: int = IntConverter()
-#     # - Radius of specified wind intensity for 3rd quadrant/octant
-#     #  (counting clockwise from quadrant specified in windcode).
-#     #  0 - 1200 nm.                                  4 char.
-#     microwave_rad4: int = IntConverter()
-#     # - Radius of specified wind intensity for 4th quadrant/octant
-#     #  (counting clockwise from quadrant specified in windcode).
-#     #  0 - 1200 nm.                                  4 char.
-#     microwave_rad5: int = IntConverter()
-#     # - Radius of specified wind intensity for 5th octant
-#     #  (counting clockwise from quadrant specified in windcode).
-#     #  0 - 1200 nm.                                  4 char.
-#     microwave_rad6: int = IntConverter()
-#     # - Radius of specified wind intensity for 6th octant
-#     #  (counting clockwise from quadrant specified in windcode).
-#     #  0 - 1200 nm.                                  4 char.
-#     microwave_rad7: int = IntConverter()
-#     # - Radius of specified wind intensity for 7th octant
-#     #  (counting clockwise from quadrant specified in windcode).
-#     #  0 - 1200 nm.                                  4 char.
-#     microwave_rad8: int = IntConverter()
-#     # - Radius of specified wind intensity for 8th octant
-#     #  (counting clockwise from quadrant specified in windcode).
-#     #  0 - 1200 nm.                                  4 char.
-#     microwave_rad_mod1: str = StrConverter()
-#     # - E-Edge of Pass, C-Cut off by Land, B-Both  1 char.
-#     microwave_rad_mod2: str = StrConverter()
-#     # - E-Edge of Pass, C-Cut off by Land, B-Both  1 char.
-#     microwave_rad_mod3: str = StrConverter()
-#     # - E-Edge of Pass, C-Cut off by Land, B-Both  1 char.
-#     microwave_rad_mod4: str = StrConverter()
-#     # - E-Edge of Pass, C-Cut off by Land, B-Both  1 char.
-#     microwave_rad_mod5: str = StrConverter()
-#     # - E-Edge of Pass, C-Cut off by Land, B-Both  1 char.
-#     microwave_rad_mod6: str = StrConverter()
-#     # - E-Edge of Pass, C-Cut off by Land, B-Both  1 char.
-#     microwave_rad_mod7: str = StrConverter()
-#     # - E-Edge of Pass, C-Cut off by Land, B-Both  1 char.
-#     microwave_rad_mod8: str = StrConverter()
-#     # - E-Edge of Pass, C-Cut off by Land, B-Both  1 char.
-#     microwave_radii_confidence: int = IntConverter()
-#     # confidence - 1-good, 2-fair, 3-poor        1 char.
-#     comments: str = StrConverter()  # -                                    52 char.
-
-
-# @dataclass
-# class Radar(CommonFields):
-#     "Extra Radar data columns"
-#     # RDRC, RDRD, RDRT -- Radar, Conventional, Doppler and TRMM
-#     radar_type: str = StrConverter()
-#     #:                                    1 char.
-#     # L - Land; S - Ship; A - Aircraft; T - Satellite
-#     radar_format: str = StrConverter()
-#     #:                                  1 char.
-#     # R - RADOB; P - plain language; D - Doppler
-#     radob_code: str = StrConverter()
-#     # - A S W a r t d d f f              10 char.
-#     # c c c c t e s s s s
-#     # See description below.
-#     # Also enter slashes if reported and in place of blanks.
-#     eye_shape: str = StrConverter()
-#     # -                                    2 char.
-#     # CI - Circular; EL - Elliptic; CO - concentric
-#     radar_percent_of_eye_wall_observed: int = IntConverter()
-#     # (99 = 100%) -     2 char.
-#     radar_spiral_overlay: int = IntConverter()
-#     # (degrees) -                     2 char.
-#     radar_site_position_lat: float = LatLonConverter(scale=0.01)
-#     # N/S -                  5 char.
-#     radar_site_position_lon: float = LatLonConverter(scale=0.01)
-#     # E/W -                  6 char.
-#     radar_inbound_max_wind: int = IntConverter()
-#     # - 0-300 kts                   3 char.
-#     radar_inbound_max_wind_azimuth: int = IntConverter()
-#     # - degrees, 1-360                    3 char.
-#     radar_inbound_max_wind_range: int = IntConverter()
-#     # - less than 400 nm,                   3 char.
-#     radar_inbound_max_wind_elevation: int = IntConverter()
-#     # - feet                            5 char.
-#     radar_outbound_max_wind: int = IntConverter()
-#     # - 0-300 kts                  3 char.
-#     radar_outbound_max_wind_azimuth: int = IntConverter()
-#     # - degrees, 1-360                    3 char.
-#     radar_outbound_max_wind_range: int = IntConverter()
-#     # - less than 400 nm,                   3 char.
-#     radar_outbound_max_wind_elevation: int = IntConverter()
-#     # - feet                            5 char.
-#     radar_max_cloud_height: int = IntConverter()
-#     # (trmm radar) - 70,000ft       5 char.
-#     # Rain accumulation:
-#     radar_max_rain_accumulation: int = IntConverter()
-#     # , hundreths of inches 0-10000 5 char.
-#     radar_max_rain_accumulation_time_interval: int = IntConverter()
-#     # , 1 - 120 hours                 3 char.
-#     radar_max_rain_accumulation_lat: float = LatLonConverter(scale=0.01)
-#     # N/S - Latitude (hundreths of degrees), 0-9000   5 char.
-#     # N/S is the hemispheric index.
-#     radar_max_rain_accumulation_lon: float = LatLonConverter(scale=0.01)
-#     # E/W - Longitude (hundreths of degrees), 0-18000 6 char.
-#     # E/W is the hemispheric index.
-#     comments: str = StrConverter()
-#     #  -                                    52 char.
-
-
-# @dataclass
-# class Aircraft(CommonFields):
-#     "Extra Aircraft data columns"
-#     # flight_level: str #
-#     aircraft_flight_level_ft: int = IntConverter()
-#     # - 100's of feet                2 char.
-#     aircraft_flight_level_hpa: int = IntConverter()
-#     # - millibars                    3 char.
-#     aircraft_minimum_height: int = IntConverter()
-#     # - meters                     4 char.
-#     # msw: str # # (inbound leg)
-#     aircraft_max_surface_wind_intensity: int = IntConverter()
-#     # - kts                             3 char.
-#     aircraft_max_surface_wind_bearing: int = IntConverter()
-#     # - degrees                           3 char.
-#     aircraft_max_surface_wind_range: int = IntConverter()
-#     # - nm                                  3 char.
-#     # mflw: str # # (inbound leg)
-#     aircraft_max_fl_wind_direction: int = IntConverter()
-#     # - degrees                         3 char.
-#     aircraft_max_fl_wind_intensity: int = IntConverter()
-#     # - kts                             3 char.
-#     aircraft_max_fl_wind_bearing: int = IntConverter()
-#     # - degrees                           3 char.
-#     aircraft_max_fl_wind_range: int = IntConverter()
-#     # - nm                                  3 char.
-#     aircraft_mean_slp: int = IntConverter()
-#     # # - millibars         4 char.
-#     aircraft_temperature_outside_eye: int = IntConverter()
-#     #  -99 to 99 Celsius     3 char.
-#     aircraft_temperature_inside_eye: int = IntConverter()
-#     #   -99 to 99 Celsius     3 char.
-#     aircraft_dew_point_temperature: int = IntConverter()
-#     #    -99 to 99 Celsius     3 char.
-#     aircraft_sea_surface_temperature: int = IntConverter()
-#     #    0 to 40 Celsius     2 char.
-#     aircraft_eye_character: str = StrConverter()
-#     # #or Wall Cld Thickness (pre-2015) 2 char.
-#     #  NA - < 50% eyewall
-#     #  CL - Closed Wall
-#     #  PD - Poorly Defined
-#     #  N  - open North
-#     #  NE - open Northeast
-#     #  E  - open East
-#     #  SE - open Southeast
-#     #  S  - open South
-#     #  SW - open Southwest
-#     #  W  - open West
-#     #  NW - open Northwest
-#     #  SB - spiral band
-#     #   Eye Shape/Orientation/Diameter
-#     aircraft_shape: str = StrConverter()
-#     #: #CI-circ.; EL-elliptic; CO-concentric 2 char.
-#     aircraft_orientation: int = IntConverter()
-#     # #- degrees                       3 char.
-#     aircraft_diameter: int = IntConverter()
-#     # #(long axis if elliptical) - nm     2 char.
-#     aircraft_short_axis: int = IntConverter()
-#     # #(blank if not elliptical) - nm   2 char.
-#     aircraft_navigational_accuracy: int = IntConverter()
-#     # #- tenths of nm                 3 char.
-#     aircraft_meteorological_accuracy: int = IntConverter()
-#     ## - tenths of nm               3 char.
-#     aircraft_mission_number: str = StrConverter()
-#     # #                                 2 char.
-#     comments: str = StrConverter()
-#     # #-                                    52 char.
-#     # extra: str
-
-
-# @dataclass
-# class Dropsonde(CommonFields):
-#     "Extra Dropsonde data columns"
-#     drop_environment: str = StrConverter()
-#     # -                           10 char.
-#     # EYEWALL, EYE, RAINBAND, MXWNDBND, SYNOPTIC
-#     drop_height_of_midpoint: int = IntConverter()
-#     # meters (75 - 999 m)                          3 char.
-#     drop_windspeed_150m: int = IntConverter()
-#     # of drop - kts 3 char.
-#     drop_windspeed_500m: int = IntConverter()
-#     # - kts        3 char.
-#     comments: str = StrConverter()
-#     # -                                    52 char.
-
-
-# @dataclass
-# class Analysis(CommonFields):
-#     "Extra Analysis data columns"
-#     analysis_analyst: str = StrConverter()
-#     # initials -                             3 char.
-#     analysis_start_time: datetime = DatetimeConverter(datetime_format="%Y%m%d%H%M")
-#     # - YYYYMMDDHHMM                     12 char.
-#     analysis_end_time: datetime = DatetimeConverter(datetime_format="%Y%m%d%H%M")
-#     # -  YYYYMMDDHHMM                      12 char.
-#     analysis_distance_data: int = IntConverter()
-#     # , 0 - 300 nm           3 char.
-#     analysis_sst: int = IntConverter()
-#     # - celsius                                  4 char
-#     analysis_sources: str = StrConverter()
-#     # -                         24 char.
-#     # b - buoy,
-#     # l - land station,
-#     # m - SSMI,
-#     # c - scat,
-#     # t - trmm,
-#     # i - ir,
-#     # v - vis,
-#     # p - ship,
-#     # d - dropsonde,
-#     # a - aircraft,
-#     # r - radar,
-#     # x - other
-#     # 1 char. identifier for each ob source, concatenate
-#     # the selected 1 char. identifiers to list all of the
-#     # sources.
-#     comments: str = StrConverter()
-#     # -                                    52 char.
+class Analysis(FDeckCommon_):
+    def __init__(self):
+        super().__init__()
+        "Extra Analysis data columns"
+        self.analysis_analyst: str = StringColumn()
+        # initials -                             3 char.
+        self.analysis_start_time: datetime = DatetimeColumn(datetime_format="%Y%m%d%H%M")
+        # - YYYYMMDDHHMM                     12 char.
+        self.analysis_end_time: datetime = DatetimeColumn(datetime_format="%Y%m%d%H%M")
+        # -  YYYYMMDDHHMM                      12 char.
+        self.analysis_distance_data: int = NumericColumn()
+        # , 0 - 300 nm           3 char.
+        self.analysis_sst: int = NumericColumn()
+        # - celsius                                  4 char
+        self.analysis_sources: str = StringColumn()
+        # -                         24 char.
+        # b - buoy,
+        # l - land station,
+        # m - SSMI,
+        # c - scat,
+        # t - trmm,
+        # i - ir,
+        # v - vis,
+        # p - ship,
+        # d - dropsonde,
+        # a - aircraft,
+        # r - radar,
+        # x - other
+        # 1 char. identifier for each ob source, concatenate
+        # the selected 1 char. identifiers to list all of the
+        # sources.
+        self.comments: str = StringColumn()
+        # -                                    52 char.
 
 
 def main():

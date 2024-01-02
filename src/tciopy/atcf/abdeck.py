@@ -10,6 +10,7 @@ from itertools import zip_longest
 import numpy as np
 import pandas as pd
 
+from tciopy.atcf.decks import ADeck
 # from tciopy.converters import DatetimeConverter, IntConverter, LatLonConverter, StrConverter
 from tciopy.converters import datetimeconverter, int_converter, latlonconverter
 
@@ -28,21 +29,13 @@ def read_adeck(fname: str):
         opener = gzip.open
     else:
         opener = open
-    alldata = AdeckEntry()
+    alldata = ADeck()
+    # alldata = AdeckEntry()
     with opener(fname, mode="rt", newline="\n") as io_file:
         for line in io_file:
             splitline = re.split(r",\s+", line)
             alldata.append(splitline)
-        # datum = pd.read_csv(
-        #     io_file,
-        #     sep=" *, *",
-        #     engine="python",
-        #     index_col=False,
-        #     header=None,
-        #     # on_bad_lines="warn",
-        #     names=atcf_colnames,
-        #     dtype=dtypes,
-        # )
+
     datum = alldata.to_dataframe()
 
     # for key, converter in converters.items():
@@ -72,7 +65,7 @@ def read_adeck(fname: str):
     }
     agg_dict = {index: aggmethod.get(str(dtype), "first") for index, dtype in datum.dtypes.items()}
     decker = (
-        datum.groupby(["basin", "number", "datetime", "tech", "tau"])
+        datum.groupby(["basin", "number", "datetime", "tech", "tau"], observed=True)
         .aggregate(agg_dict)
         .reset_index(drop=True)
     )
@@ -259,13 +252,18 @@ class AdeckEntry:
         for key, val in zip_longest(self.data_store.keys(), values, fillvalue=""):
             self.data_store[key]["data"].append(val)
 
+    def pd_parse(self, key, converter, raw_data):
+        if "converter" in converter:
+            raw_data[key] = converter['converter'](raw_data[key])
+
     def to_dataframe(self):
         raw_data = {
             key: np.array(self.data_store[key]["data"], dtype=object) for key in self.data_store
         }
         for key, converter in self.data_store.items():
-            if "converter" in converter:
-                raw_data[key] = converter["converter"](raw_data[key])
+            self.pd_parse(key, converter, raw_data)
+            # if "converter" in converter:
+                # raw_data[key] = self.pd_parse(converter, raw_data[key])
         return pd.DataFrame(raw_data)
 
 
