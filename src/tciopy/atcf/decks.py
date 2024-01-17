@@ -13,16 +13,24 @@ class BaseDeck(ABC):
         pass
 
     def __repr__(self,):
-        colnames = ",\t".join(self.colnames)+"\n"
+        colnames = ",\t".join(self._colnames)+"\n"
         return colnames+"\n".join([",\t".join(row) for row in self.rows()])
     
     @cached_property
-    def colnames(self):
-        return vars(self).keys()
+    def _colnames(self):
+        return [key for key in vars(self).keys() if not key.startswith("_")]
     
     @cached_property
-    def columns(self):
-        return [(var, data) for var,data in vars(self).items()]
+    def _columns(self):
+        return [(var, data) for var,data in vars(self).items() if not var.startswith("_")]
+
+    @cached_property
+    def _num_columns(self):
+        return len(self._colnames)
+
+    def _datacols(self):
+        for _, data in self._columns:
+            yield data
 
     def from_iterable(self, iterable):
         for row in iterable:
@@ -33,14 +41,14 @@ class BaseDeck(ABC):
             yield row
 
     def append(self, iterable):
-        for (_, col), val in zip_longest(self.columns, iterable,fillvalue=""):
+        for col, val in zip_longest(self._datacols(), iterable, fillvalue=""):
             col.append(val)
 
     def __len__(self,):
         return len(self.basin)
 
     def to_dataframe(self):
-        columns = {name:column.pd_parse() for name, column in self.columns}
+        columns = {name:column.pd_parse() for name, column in self._columns}
         return pd.DataFrame(columns)
 
 
