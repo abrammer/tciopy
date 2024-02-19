@@ -33,7 +33,7 @@ def read_adeck(fname: str):
     # alldata = AdeckEntry()
     with opener(fname, mode="rt", newline="\n") as io_file:
         for line in io_file:
-            splitline = re.split(r",\s+", line)
+            splitline = re.split(r",\s+", line, maxsplit=44)
             alldata.append(splitline)
 
     datum = alldata.to_dataframe()
@@ -52,10 +52,15 @@ def read_adeck(fname: str):
     datum.loc[best_lines, "tnum"] = np.NAN
     datum["validtime"] = datum["datetime"] + pd.to_timedelta(datum["tau"], unit="h")
 
-    # This transposes mulitple rows for each radii, to a single row with multiple columns.
-    for kt in 34, 50, 64:
-        for qdc, quad in [("NEQ", "NEQ"), ("SEQ", "SEQ"), ("SWQ", "SWQ"), ("NWQ", "NWQ")]:
-            datum[f"rad{kt}_{qdc}"] = datum[datum["rad"] == kt][f"rad_{quad}"]
+    datum.loc[((datum[['rad_NWQ', 'rad_NEQ', 'rad_SEQ', 'rad_SWQ']] == 0).sum(axis=1) == 4), ['rad_NWQ', 'rad_NEQ', 'rad_SEQ', 'rad_SWQ']] =  np.nan
+    def rename_quadrants(group):
+        key = group.name
+        key = pd.to_numeric(key)
+        if key == 0:
+            key=34
+        ngroup = group.rename(columns={'rad_NEQ': f'rad{key:2.0f}_NEQ','rad_NWQ': f'rad{key:2.0f}_NWQ','rad_SEQ': f'rad{key:2.0f}_SEQ','rad_SWQ': f'rad{key:2.0f}_SWQ' })
+        return ngroup.reset_index()
+    datum = datum.groupby('rad', observed=True).apply(rename_quadrants)
 
     aggmethod = {
         "object": "first",
@@ -70,7 +75,7 @@ def read_adeck(fname: str):
         .reset_index(drop=True)
     )
     decker.drop(
-        columns=["rad", "windcode", "rad_NEQ", "rad_NWQ", "rad_SEQ", "rad_SWQ"], inplace=True
+        columns=["rad", "windcode", ], inplace=True
     )
 
     # stretch out the stormname, across neighboring rows.
