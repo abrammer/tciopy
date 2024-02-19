@@ -275,6 +275,7 @@ def write_adeck(outf, deck):
     for row in deck.itertuples():
         for line in format_adeck_line(row):
             line = line[:95] + re.sub(r"(, )[\s,0]+$", ", ", line[95:])
+            line = line.rstrip(r"\n")
             outf.write(f"{line}\n")
     
 def fillnan(val, nafill=0):
