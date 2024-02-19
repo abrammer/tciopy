@@ -292,7 +292,7 @@ def format_adeck_line(row):
         if (kt > 34) and ((set([rad1, rad2, rad3, rad4]) == {0}) or pd.isnull([rad1, rad2, rad3, rad4]).all()):
             continue
         line = (
-            f"{row.basin}, {row.number:02.0f}, {row.datetime:%Y%m%d%H}, "
+            f"{row.basin}, {row.number:>2}, {row.datetime:%Y%m%d%H}, "
             f"{row.tnum:02.0f}, {row.tech:>4}, {row.tau:3.0f}, "
             f"{abs(row.lat)*10:3.0f}{'N' if row.lat>0 else 'S'}, "
             f"{abs(row.lon)*10:4.0f}{'E' if row.lon>0 else 'W'},"

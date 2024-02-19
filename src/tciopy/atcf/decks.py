@@ -55,7 +55,7 @@ class BaseDeck(ABC):
 class ADeck(BaseDeck):
     def __init__(self):
         self.basin = CategoricalColumn()
-        self.number = NumericColumn()
+        self.number = CategoricalColumn()
         self.datetime = DatetimeColumn(datetime_format="%Y%m%d%H")
         self.tnum = NumericColumn()
         self.tech = CategoricalColumn()
