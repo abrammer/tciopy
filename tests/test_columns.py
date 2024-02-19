@@ -5,7 +5,7 @@ from tciopy import converters
 
 
 def test_num_column():
-    col = converters.NumColumn()
+    col = converters.NumericColumn()
     col.append("1")
     col.append("2")
     col.append("3")
@@ -15,7 +15,7 @@ def test_num_column():
 
 
 def test_num_column_nan():
-    col = converters.NumColumn()
+    col = converters.NumericColumn()
     col.append("1")
     col.append("2")
     col.append("")

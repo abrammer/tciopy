@@ -15,7 +15,7 @@ class StringColumn(list):
 
     def pd_parse(self) -> pd.Series:
         "Return a pandas series of the list"
-        return np.array(self, dtype=object)
+        return pd.Series(self)
 
 
 class NumericColumn(list):
@@ -75,7 +75,7 @@ class DatetimeColumn(list):
 
     def pd_parse(self) -> pd.Series:
         "Return a pandas series of datetimes"
-        return pd.to_datetime(np.array(self, dtype=object), format=self.datetime_format)
+        return pd.to_datetime(pd.Series(self), format=self.datetime_format)
 
 import numpy as np
 import pandas as pd

@@ -40,7 +40,7 @@ def read_adeck(fname: str):
 
     # for key, converter in converters.items():
     #     datum[key] = datum[key].apply(converter)
-    datum = datum.loc[(datum["lat"] != 0) | (datum["lon"] != 0)]
+    # datum = datum.loc[(datum["lat"] != 0) | (datum["lon"] != 0)]
 
     #  Quicker to process dates in series after than as a converter
     # datum["datetime"] = pd.to_datetime(datum["datetime"], format="%Y%m%d%H")
@@ -271,26 +271,40 @@ class AdeckEntry:
                 # raw_data[key] = self.pd_parse(converter, raw_data[key])
         return pd.DataFrame(raw_data)
 
+def write_adeck(outf, deck):
+    for row in deck.itertuples():
+        for line in format_adeck_line(row):
+            line = line[:95] + re.sub(r"(, )[\s,0]+$", ", ", line[95:])
+            outf.write(f"{line}\n")
+    
+def fillnan(val, nafill=0):
+    if pd.isna(val):
+        return nafill
+    return val
 
 def format_adeck_line(row):
     """Format a single row of a dataframe into an adeck line"""
     for kt in 34, 50, 64:
-        rad1 = np.max([getattr(row, f"rad{kt}_1", 0), 0])
-        rad2 = np.max([getattr(row, f"rad{kt}_2", 0), 0])
-        rad3 = np.max([getattr(row, f"rad{kt}_3", 0), 0])
-        rad4 = np.max([getattr(row, f"rad{kt}_4", 0), 0])
-        if (kt > 34) and set([rad1, rad2, rad3, rad4]) == {0}:
+        rad1 = np.max([getattr(row, f"rad{kt}_NEQ", 0), 0])
+        rad2 = np.max([getattr(row, f"rad{kt}_SEQ", 0), 0])
+        rad3 = np.max([getattr(row, f"rad{kt}_SWQ", 0), 0])
+        rad4 = np.max([getattr(row, f"rad{kt}_NWQ", 0), 0])
+        if (kt > 34) and ((set([rad1, rad2, rad3, rad4]) == {0}) or pd.isnull([rad1, rad2, rad3, rad4]).all()):
             continue
         line = (
-            f"{row.basin}, {row.number:2}, {row.datetime:%Y%m%d%H}, "
-            f"{row.tnum:02.0f}, {row.tech}, {row.tau:3.0f}, "
+            f"{row.basin}, {row.number:02.0f}, {row.datetime:%Y%m%d%H}, "
+            f"{row.tnum:02.0f}, {row.tech:>4}, {row.tau:3.0f}, "
             f"{abs(row.lat)*10:3.0f}{'N' if row.lat>0 else 'S'}, "
             f"{abs(row.lon)*10:4.0f}{'E' if row.lon>0 else 'W'},"
-            f"{row.vmax:4.0f}, {row.mslp:4.0f}, {row.type if row.type else 'XX'}, "
-            f"{kt:3}, NEQ, {rad1:4.0f}, {rad2:4.0f}, {rad3:4.0f}, {rad4:4.0f}, "
-            f"{row.pouter:4.0f}, {row.router:4.0f}, {row.rmw:3.0f}, {row.gusts:3.0f}, "
-            f"{row.eye:3.0f},{row.subregion:>3},{row.maxseas:3.0f}, {row.initials:>3}, "
-            f"{row.direction:3.0f},{row.speed:3.0f}, {row.stormname:>10}"
+            f"{row.vmax:4.0f}, {row.mslp:4.0f}, {row.type:>2}, "
+            f"{kt:3}, NEQ, {fillnan(rad1):4.0f}, {fillnan(rad2):4.0f}, {fillnan(rad3):4.0f}, {fillnan(rad4):4.0f}, "
+            f"{fillnan(row.pouter):4.0f}, {fillnan(row.router):4.0f}, {fillnan(row.rmw):3.0f}, {fillnan(row.gusts):3.0f}, "
+            f"{fillnan(row.eye):3.0f},{row.subregion:>4},{fillnan(row.maxseas):4.0f}, {row.initials:>3}, "
+            f"{fillnan(row.direction):3.0f},{fillnan(row.speed):4.0f}, {row.stormname:>10}, {row.depth:>1}, "
+            f"{fillnan(row.seas):4.0f}, {row.seascode:>3}, {fillnan(row.seas1):4.0f}, {fillnan(row.seas2):4.0f}, "
+            f"{fillnan(row.seas3):4.0f}, {fillnan(row.seas4):4.0f}, {row.userdefined1:>4}, {row.userdata1:>4}, "
+            f"{row.userdefined2:>4}, {row.userdata2:>4}, {row.userdefined3:>4}, {row.userdata3:>4}, "
+            f"{row.userdefined4:>4}, {row.userdata4:>4}, {row.userdefined5:>4}, {row.userdata5:>4}"
         )
         yield line
 
