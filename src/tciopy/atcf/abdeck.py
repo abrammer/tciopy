@@ -33,7 +33,7 @@ def read_adeck(fname: str):
     # alldata = AdeckEntry()
     with opener(fname, mode="rt", newline="\n") as io_file:
         for line in io_file:
-            splitline = re.split(r",\s+", line, maxsplit=44)
+            splitline = re.split(r",\s+", line.rstrip("\n"), maxsplit=44)
             alldata.append(splitline)
 
     datum = alldata.to_dataframe()
