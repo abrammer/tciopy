@@ -48,7 +48,12 @@ class BaseDeck(ABC):
         return len(self.basin)
 
     def to_dataframe(self):
-        columns = {name:column.pd_parse() for name, column in self._columns}
+        columns = {}
+        for name, column in self._columns:
+            try:
+                columns[name] = column.pd_parse() 
+            except ValueError:
+                print(f"Error parsing column {name}")
         return pd.DataFrame(columns)
 
 

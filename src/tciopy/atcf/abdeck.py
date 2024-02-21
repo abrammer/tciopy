@@ -33,7 +33,7 @@ def read_adeck(fname: str):
     # alldata = AdeckEntry()
     with opener(fname, mode="rt", newline="\n") as io_file:
         for line in io_file:
-            splitline = re.split(r",\s+", line.rstrip("\n"), maxsplit=44)
+            splitline = re.split(r",\s*", line.rstrip("\n"), maxsplit=44)
             alldata.append(splitline)
 
     datum = alldata.to_dataframe()
@@ -49,7 +49,7 @@ def read_adeck(fname: str):
         pd.to_timedelta(datum.loc[best_lines, "tnum"].fillna(0), unit="m")
         + datum.loc[best_lines, "datetime"]
     )
-    datum.loc[best_lines, "tnum"] = np.NAN
+    datum.loc[best_lines, "tnum"] = datum.loc[best_lines, "tnum"].fillna(0)
     datum["validtime"] = datum["datetime"] + pd.to_timedelta(datum["tau"], unit="h")
 
     datum.loc[((datum[['rad_NWQ', 'rad_NEQ', 'rad_SEQ', 'rad_SWQ']] == 0).sum(axis=1) == 4), ['rad_NWQ', 'rad_NEQ', 'rad_SEQ', 'rad_SWQ']] =  np.nan
@@ -295,9 +295,9 @@ def format_adeck_line(row):
         line = (
             f"{row.basin}, {row.number:>2}, {row.datetime:%Y%m%d%H}, "
             f"{row.tnum:02.0f}, {row.tech:>4}, {row.tau:3.0f}, "
-            f"{abs(row.lat)*10:3.0f}{'N' if row.lat>0 else 'S'}, "
-            f"{abs(row.lon)*10:4.0f}{'E' if row.lon>0 else 'W'},"
-            f"{row.vmax:4.0f}, {row.mslp:4.0f}, {row.type:>2}, "
+            f"{fillnan(abs(row.lat)*10):3.0f}{'N' if row.lat>0 else 'S'}, "
+            f"{fillnan(abs(row.lon)*10):4.0f}{'E' if row.lon>0 else 'W'},"
+            f"{fillnan(row.vmax):4.0f}, {fillnan(row.mslp):4.0f}, {row.type:>2}, "
             f"{kt:3}, NEQ, {fillnan(rad1):4.0f}, {fillnan(rad2):4.0f}, {fillnan(rad3):4.0f}, {fillnan(rad4):4.0f}, "
             f"{fillnan(row.pouter):4.0f}, {fillnan(row.router):4.0f}, {fillnan(row.rmw):3.0f}, {fillnan(row.gusts):3.0f}, "
             f"{fillnan(row.eye):3.0f},{row.subregion:>4},{fillnan(row.maxseas):4.0f}, {row.initials:>3}, "
