@@ -79,8 +79,8 @@ def read_adeck(fname: str):
     )
 
     # stretch out the stormname, across neighboring rows.
-    decker["storm_name"] =  decker["storm_name"].ffill()
-    decker["storm_name"] =  decker["storm_name"].bfill()
+    decker["stormname"] =  decker["stormname"].ffill()
+    decker["stormname"] =  decker["stormname"].bfill()
     
     return decker.reset_index(drop=True)
 
