@@ -1,0 +1,17 @@
+[package]
+name = "adeck_parser"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pyo3 = { version = "0.18", features = ["extension-module"] }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+
+
+[dev-dependencies]
+maturin = "0.14"
+
+[lib]
+crate-type = ["cdylib"]
+name = "adeck_parser"
