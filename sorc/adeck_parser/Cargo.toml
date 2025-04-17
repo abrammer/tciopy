@@ -7,7 +7,8 @@ edition = "2021"
 pyo3 = { version = "0.18", features = ["extension-module"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-
+rayon = "1.5"
+arrow = { version = "37.0.0", features = ["pyarrow"] }
 
 [dev-dependencies]
 maturin = "0.14"

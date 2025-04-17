@@ -4,11 +4,11 @@ import pandas as pd
 def main():
     import time
     stime = time.time()
-    df = adeck_parser.parse_adeck\
+    df = pd.DataFrame(adeck_parser.parse_adeck\
 ("/home/abrammer/repos/tciopy/data/aal032\
-023.dat")
+023.dat"))
     print(time.time() - stime)
-    # print(df)
+    print(df.shape)
 
 
 if __name__ == "__main__":
