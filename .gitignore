@@ -2,3 +2,4 @@
 .ruff_cache
 *egg-info
 *build
+sorc/adeck_parser
