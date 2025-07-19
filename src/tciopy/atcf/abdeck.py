@@ -8,11 +8,105 @@ import re
 from pathlib import Path
 from itertools import zip_longest
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from tciopy.atcf.decks import ADeck
 # from tciopy.converters import DatetimeConverter, IntConverter, LatLonConverter, StrConverter
 from tciopy.converters import datetimeconverter, int_converter, latlonconverter
+
+        # self.basin = CategoricalColumn()
+        # self.number = CategoricalColumn()
+        # self.datetime = DatetimeColumn(datetime_format="%Y%m%d%H")
+        # self.tnum = NumericColumn()
+        # self.tech = CategoricalColumn()
+        # self.tau = NumericColumn()
+        # self.lat = LatLonColumn(scale=0.1)
+        # self.lon = LatLonColumn(scale=0.1)
+        # self.vmax = NumericColumn()
+        # self.mslp = NumericColumn()
+        # self.type = CategoricalColumn()
+        # self.rad = CategoricalColumn()
+        # self.windcode = StringColumn()
+        # self.rad_NEQ = NumericColumn()
+        # self.rad_SEQ = NumericColumn()
+        # self.rad_SWQ = NumericColumn()
+        # self.rad_NWQ = NumericColumn()
+        # self.pouter = NumericColumn()
+        # self.router = NumericColumn()
+        # self.rmw = NumericColumn()
+        # self.gusts = NumericColumn()
+        # self.eye = NumericColumn()
+        # self.subregion = StringColumn()
+        # self.maxseas = NumericColumn()
+        # self.initials = StringColumn()
+        # self.direction = NumericColumn()
+        # self.speed = NumericColumn()
+        # self.stormname = CategoricalColumn()
+        # self.depth = StringColumn()
+        # self.seas = NumericColumn()
+        # self.seascode = StringColumn()
+        # self.seas1 = NumericColumn()
+        # self.seas2 = NumericColumn()
+        # self.seas3 = NumericColumn()
+        # self.seas4 = NumericColumn()
+        # self.userdefined1 = StringColumn()
+        # self.userdata1 = StringColumn()
+        # self.userdefined2 = StringColumn()
+        # self.userdata2 = StringColumn()
+        # self.userdefined3 = StringColumn()
+        # self.userdata3 = StringColumn()
+        # self.userdefined4 = StringColumn()
+        # self.userdata4 = StringColumn()
+        # self.userdefined5 = StringColumn()
+        # self.userdata5 = StringColumn()
+
+adeck_schema = pl.Schema({
+    "basin": pl.Categorical(),
+    "number": pl.Categorical(),
+    "datetime": pl.String,
+    "tnum": pl.Int16,
+    "tech": pl.Categorical(),
+    "tau": pl.Int16,
+    "lat": pl.String,
+    "lon": pl.String,
+    "vmax": pl.Float32,
+    "mslp": pl.Float32,
+    "type": pl.Categorical(),
+    "rad": pl.Categorical(),
+    "windcode": pl.String,
+    "rad_NEQ": pl.Float32,
+    "rad_SEQ": pl.Float32,
+    "rad_SWQ": pl.Float32,
+    "rad_NWQ": pl.Float32,
+    "pouter": pl.Float32,
+    "router": pl.Float32,
+    "rmw": pl.Float32,
+    "gusts": pl.Float32,
+    "eye": pl.Float32,
+    "subregion": pl.String,
+    "maxseas": pl.Float32,
+    "initials": pl.String,
+    "direction": pl.Float32,
+    "speed": pl.Float32,
+    "stormname": pl.Categorical(),
+    "depth": pl.String,
+    "seas": pl.Float32,
+    "seascode": pl.String,
+    "seas1": pl.Float32,
+    "seas2": pl.Float32,
+    "seas3": pl.Float32,
+    "seas4": pl.Float32,
+    "userdefined1": pl.String,
+    "userdata1": pl.String,
+    "userdefined2": pl.String,
+    "userdata2": pl.String,
+    "userdefined3": pl.String,
+    "userdata3": pl.String,
+    "userdefined4": pl.String,
+    "userdata4": pl.String,
+    "userdefined5": pl.String,
+    "userdata5": pl.String
+})
 
 
 def read_adeck(fname: str):
@@ -22,67 +116,93 @@ def read_adeck(fname: str):
     if isinstance(fname, str):
         fname = Path(fname)
 
-    # n.b. ' *, *' takes care of stripping whitespace
-    #  python engine allows for providing too many column names
-    #  datetime as converter is super slow, str2ll is neglible time addition
-    if fname.suffix == ".gz":
-        opener = gzip.open
-    else:
-        opener = open
-    alldata = ADeck()
-    # alldata = AdeckEntry()
-    with opener(fname, mode="rt", newline="\n") as io_file:
-        for line in io_file:
-            splitline = re.split(r",\s*", line.rstrip("\n"), maxsplit=44)
-            alldata.append(splitline)
-
-    datum = alldata.to_dataframe()
-
-    # for key, converter in converters.items():
-    #     datum[key] = datum[key].apply(converter)
-    # datum = datum.loc[(datum["lat"] != 0) | (datum["lon"] != 0)]
+    # # n.b. ' *, *' takes care of stripping whitespace
+    # #  python engine allows for providing too many column names
+    # #  datetime as converter is super slow, str2ll is neglible time addition
+    # if fname.suffix == ".gz":
+    #     opener = gzip.open
+    # else:
+    #     opener = open
+    # alldata = ADeck()
+    # # alldata = AdeckEntry()
+    # with opener(fname, mode="rt", newline="\n") as io_file:
+    #     for line in io_file:
+    #         splitline = re.split(r",\s*", line.rstrip("\n"), maxsplit=44)
+    #         alldata.append(splitline)
+    datum = pl.read_csv(fname, schema=adeck_schema)
+    # datum = alldata.to_polarsframe()
+    datum = datum.with_columns([
+        (pl.col("datetime")+'00').str.strptime(pl.Datetime, "%Y%m%d%H%M", strict=False),
+    ])
+    datum = datum.with_columns([
+            pl.when(pl.col("lat").str.ends_with('S'))
+            .then(pl.col("lat").str.strip_chars('NS ').cast(pl.Float32) * -0.1)
+            .otherwise(pl.col("lat").str.strip_chars('NS ').cast(pl.Float32)*0.1),
+            pl.when(pl.col("lon").str.ends_with('W'))
+            .then(pl.col("lon").str.strip_chars('EW ').cast(pl.Float32) * -0.1)
+            .otherwise(pl.col("lon").str.strip_chars('EW ').cast(pl.Float32)*0.1)
+    ])
 
     #  Quicker to process dates in series after than as a converter
     # datum["datetime"] = pd.to_datetime(datum["datetime"], format="%Y%m%d%H")
     best_lines = datum["tech"] == "BEST"
-    datum.loc[best_lines, "datetime"] = (
-        pd.to_timedelta(datum.loc[best_lines, "tnum"].fillna(0), unit="m")
-        + datum.loc[best_lines, "datetime"]
-    )
-    datum.loc[best_lines, "tnum"] = datum.loc[best_lines, "tnum"].fillna(0)
-    datum["validtime"] = datum["datetime"] + pd.to_timedelta(datum["tau"], unit="h")
+    datum = datum.with_columns([
+        pl.when(best_lines)
+        .then(pl.col("datetime") + pl.duration(minutes=pl.col("tnum").fill_null(0)))
+        .otherwise(pl.col("datetime"))
+        .alias("datetime")
+    ])
 
-    datum.loc[((datum[['rad_NWQ', 'rad_NEQ', 'rad_SEQ', 'rad_SWQ']] == 0).sum(axis=1) == 4), ['rad_NWQ', 'rad_NEQ', 'rad_SEQ', 'rad_SWQ']] =  np.nan
-    def rename_quadrants(group):
-        key = group.name
-        key = pd.to_numeric(key)
-        if key == 0:
-            key=34
-        ngroup = group.rename(columns={'rad_NEQ': f'rad{key:2.0f}_NEQ','rad_NWQ': f'rad{key:2.0f}_NWQ','rad_SEQ': f'rad{key:2.0f}_SEQ','rad_SWQ': f'rad{key:2.0f}_SWQ' })
-        return ngroup.reset_index()
-    datum = datum.groupby('rad', observed=True).apply(rename_quadrants)
+    datum = datum.with_columns([
+        pl.when(best_lines & pl.col("tnum").is_null())
+        .then(0)
+        .otherwise(pl.col("tnum"))
+        .alias("tnum")
+    ])
+    datum = datum.with_columns([
+        (pl.col("datetime") + pl.duration(hours=pl.col("tau")).alias("validtime"))
+    ])
 
+    # Set quadrant columns to null if all are zero
+    quadrant_cols = ["rad_NWQ", "rad_NEQ", "rad_SEQ", "rad_SWQ"]
+    all_zero = (pl.col("rad_NWQ") == 0) & (pl.col("rad_NEQ") == 0) & (pl.col("rad_SEQ") == 0) & (pl.col("rad_SWQ") == 0)
+    datum = datum.with_columns([
+        pl.when(all_zero).then(None).otherwise(pl.col(col)).alias(col)
+        for col in quadrant_cols
+    ])
+
+    # Rename quadrant columns based on 'rad' value
+    datum = datum.with_columns([
+                        pl.when(pl.col('rad')==r).then(pl.col(f'rad_{y}')).alias(f'rad{r}_{y}')
+                        for r in ['34', '50', '64']
+                        for y in ['NEQ', 'NWQ', 'SEQ', 'SWQ']
+                        ])
+
+    # Aggregate columns
     aggmethod = {
-        "object": "first",
-        "int64": "mean",
-        "float64": "mean",
-        "datetime64[ns]": "first",
+        pl.datatypes.Utf8: pl.first,
+        pl.datatypes.Int64: pl.mean,
+        pl.datatypes.Float64: pl.mean,
+        pl.datatypes.Datetime: pl.first,
     }
-    agg_dict = {index: aggmethod.get(str(dtype), "first") for index, dtype in datum.dtypes.items()}
-    decker = (
-        datum.groupby(["basin", "number", "datetime", "tech", "tau"], observed=True)
-        .aggregate(agg_dict)
-        .reset_index(drop=True)
-    )
-    decker.drop(
-        columns=["rad", "windcode", ], inplace=True
+    grouper = ["basin", "number", "datetime", "tech", "tau"]
+    exclude_cols = ["rad", "windcode",]
+    agg_dict = [aggmethod.get(dtype, pl.first)(name)
+                for name, dtype in zip(datum.columns, datum.dtypes)
+                if name not in grouper+exclude_cols]
+
+    decker = (datum
+              .group_by(["basin", "number", "datetime", "tech", "tau"], maintain_order=True)
+              .agg(agg_dict)
     )
 
-    # stretch out the stormname, across neighboring rows.
-    decker["stormname"] =  decker["stormname"].ffill()
-    decker["stormname"] =  decker["stormname"].bfill()
-    
-    return decker.reset_index(drop=True)
+
+    # Stretch out the stormname across neighboring rows
+    decker = datum.with_columns([
+        pl.col("stormname").forward_fill().backward_fill().alias("stormname")
+    ])
+
+    return decker
 
 
 def read_bdeck(fname: str):
@@ -271,17 +391,20 @@ class AdeckEntry:
                 # raw_data[key] = self.pd_parse(converter, raw_data[key])
         return pd.DataFrame(raw_data)
 
+
 def write_adeck(outf, deck):
     for row in deck.itertuples():
         for line in format_adeck_line(row):
             line = line[:95] + re.sub(r"(, )[\s,0]+$", ", ", line[95:])
             line = line.rstrip(r"\n")
             outf.write(f"{line}\n")
-    
+
+
 def fillnan(val, nafill=0):
     if pd.isna(val):
         return nafill
     return val
+
 
 def format_adeck_line(row):
     """Format a single row of a dataframe into an adeck line"""
@@ -319,6 +442,7 @@ def main(input_filepath):
     print(time.time() - stime)
 
     print(deck)
+    print(deck.columns)
 
     # print(deck)
     # print(deck)

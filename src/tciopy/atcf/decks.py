@@ -1,6 +1,7 @@
 from functools import cached_property
 import numpy as np
 import pandas as pd
+import polars as pl
 from itertools import zip_longest
 from abc import ABC, abstractmethod
 
@@ -55,6 +56,15 @@ class BaseDeck(ABC):
             except ValueError:
                 print(f"Error parsing column {name}")
         return pd.DataFrame(columns)
+
+    def to_polarsframe(self):
+        columns = {}
+        for name, column in self._columns:
+            try:
+                columns[name] = column.pd_parse()
+            except ValueError:
+                print(f"Error parsing column {name}")
+        return pl.DataFrame(columns)
 
 
 class ADeck(BaseDeck):

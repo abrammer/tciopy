@@ -77,10 +77,6 @@ class DatetimeColumn(list):
         "Return a pandas series of datetimes"
         return pd.to_datetime(pd.Series(self), format=self.datetime_format)
 
-import numpy as np
-import pandas as pd
-
-
 
 class int_converter:
     def __init__(self, scale=1):
