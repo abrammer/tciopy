@@ -1,7 +1,6 @@
 """
 Read and write ATCF a or b deck files
 """
-import gzip
 import re
 # from dataclasses import dataclass
 # from datetime import datetime
@@ -9,56 +8,10 @@ from pathlib import Path
 from itertools import zip_longest
 import numpy as np
 import polars as pl
+import polars.selectors as cs
 
-from tciopy.atcf.decks import ADeck
 # from tciopy.converters import DatetimeConverter, IntConverter, LatLonConverter, StrConverter
 from tciopy.converters import datetimeconverter, int_converter, latlonconverter
-
-        # self.basin = CategoricalColumn()
-        # self.number = CategoricalColumn()
-        # self.datetime = DatetimeColumn(datetime_format="%Y%m%d%H")
-        # self.tnum = NumericColumn()
-        # self.tech = CategoricalColumn()
-        # self.tau = NumericColumn()
-        # self.lat = LatLonColumn(scale=0.1)
-        # self.lon = LatLonColumn(scale=0.1)
-        # self.vmax = NumericColumn()
-        # self.mslp = NumericColumn()
-        # self.type = CategoricalColumn()
-        # self.rad = CategoricalColumn()
-        # self.windcode = StringColumn()
-        # self.rad_NEQ = NumericColumn()
-        # self.rad_SEQ = NumericColumn()
-        # self.rad_SWQ = NumericColumn()
-        # self.rad_NWQ = NumericColumn()
-        # self.pouter = NumericColumn()
-        # self.router = NumericColumn()
-        # self.rmw = NumericColumn()
-        # self.gusts = NumericColumn()
-        # self.eye = NumericColumn()
-        # self.subregion = StringColumn()
-        # self.maxseas = NumericColumn()
-        # self.initials = StringColumn()
-        # self.direction = NumericColumn()
-        # self.speed = NumericColumn()
-        # self.stormname = CategoricalColumn()
-        # self.depth = StringColumn()
-        # self.seas = NumericColumn()
-        # self.seascode = StringColumn()
-        # self.seas1 = NumericColumn()
-        # self.seas2 = NumericColumn()
-        # self.seas3 = NumericColumn()
-        # self.seas4 = NumericColumn()
-        # self.userdefined1 = StringColumn()
-        # self.userdata1 = StringColumn()
-        # self.userdefined2 = StringColumn()
-        # self.userdata2 = StringColumn()
-        # self.userdefined3 = StringColumn()
-        # self.userdata3 = StringColumn()
-        # self.userdefined4 = StringColumn()
-        # self.userdata4 = StringColumn()
-        # self.userdefined5 = StringColumn()
-        # self.userdata5 = StringColumn()
 
 adeck_schema = pl.Schema({
     "basin": pl.Categorical(),
@@ -108,66 +61,59 @@ adeck_schema = pl.Schema({
     "userdata5": pl.String
 })
 
+def tolatlon(dataframe: pl.DataFrame,
+            lat: str = 'lat',
+            lon: str = 'lon',
+            scale:float = 0.1) -> pl.DataFrame:
+    """Convert lat/lon columns to numerical values in degrees"""
+    latnum = pl.col(lat).str.strip_chars('NS ').cast(pl.Float64) * scale  # 64 is overkill but 32 creating floating point weirdness
+    lonnum = pl.col(lon).str.strip_chars('EW ').cast(pl.Float64) * scale
+    return dataframe.with_columns([
+            pl.when(pl.col(lat).str.ends_with('S'))
+            .then(latnum * -1.0)
+            .otherwise(latnum),
+            pl.when(pl.col(lon).str.ends_with('W'))
+            .then(lonnum * -1.0)
+            .otherwise(lonnum)
+    ])
 
-def read_adeck(fname: str):
+
+def read_adeck(fname: str | Path) -> pl.DataFrame:
     """Read adeck from filename into pandas dataframe"""
     # Tried versions of parsing colums in the read_csv func and they were much
     # slower
-    if isinstance(fname, str):
-        fname = Path(fname)
 
-    # # n.b. ' *, *' takes care of stripping whitespace
-    # #  python engine allows for providing too many column names
-    # #  datetime as converter is super slow, str2ll is neglible time addition
-    # if fname.suffix == ".gz":
-    #     opener = gzip.open
-    # else:
-    #     opener = open
-    # alldata = ADeck()
-    # # alldata = AdeckEntry()
-    # with opener(fname, mode="rt", newline="\n") as io_file:
-    #     for line in io_file:
-    #         splitline = re.split(r",\s*", line.rstrip("\n"), maxsplit=44)
-    #         alldata.append(splitline)
-    datum = pl.read_csv(fname, schema=adeck_schema)
-    # datum = alldata.to_polarsframe()
+    datum = pl.scan_csv(fname, schema=adeck_schema, truncate_ragged_lines=True, has_header=False)
+    datum = datum.with_columns(cs.string().str.strip_chars())
+
     datum = datum.with_columns([
-        (pl.col("datetime")+'00').str.strptime(pl.Datetime, "%Y%m%d%H%M", strict=False),
+        (pl.col("datetime")+'00').str.strptime(pl.Datetime, "%Y%m%d%H%M", strict=True),
     ])
-    datum = datum.with_columns([
-            pl.when(pl.col("lat").str.ends_with('S'))
-            .then(pl.col("lat").str.strip_chars('NS ').cast(pl.Float32) * -0.1)
-            .otherwise(pl.col("lat").str.strip_chars('NS ').cast(pl.Float32)*0.1),
-            pl.when(pl.col("lon").str.ends_with('W'))
-            .then(pl.col("lon").str.strip_chars('EW ').cast(pl.Float32) * -0.1)
-            .otherwise(pl.col("lon").str.strip_chars('EW ').cast(pl.Float32)*0.1)
-    ])
+    datum = tolatlon(datum)
 
     #  Quicker to process dates in series after than as a converter
     # datum["datetime"] = pd.to_datetime(datum["datetime"], format="%Y%m%d%H")
-    best_lines = datum["tech"] == "BEST"
+    # best_lines = datum["tech"] == "BEST"
     datum = datum.with_columns([
-        pl.when(best_lines)
+        pl.when(pl.col("tech") == "BEST")
         .then(pl.col("datetime") + pl.duration(minutes=pl.col("tnum").fill_null(0)))
         .otherwise(pl.col("datetime"))
-        .alias("datetime")
-    ])
-
-    datum = datum.with_columns([
-        pl.when(best_lines & pl.col("tnum").is_null())
+        .alias("datetime"),
+        pl.when((pl.col("tech") == "BEST") & pl.col("tnum").is_null())
         .then(0)
         .otherwise(pl.col("tnum"))
-        .alias("tnum")
-    ])
-    datum = datum.with_columns([
-        (pl.col("datetime") + pl.duration(hours=pl.col("tau")).alias("validtime"))
+        .alias("tnum"),
+        pl.duration(hours=pl.col("tau")).alias("tau"),
     ])
 
-    # Set quadrant columns to null if all are zero
-    quadrant_cols = ["rad_NWQ", "rad_NEQ", "rad_SEQ", "rad_SWQ"]
+    datum = datum.with_columns((pl.col("datetime") + pl.col('tau')).alias("validtime"))
+
+    quadrant_cols = ["NWQ", "NEQ", "SEQ", "SWQ"]
     all_zero = (pl.col("rad_NWQ") == 0) & (pl.col("rad_NEQ") == 0) & (pl.col("rad_SEQ") == 0) & (pl.col("rad_SWQ") == 0)
+
+    # Set quadrant columns to null if all are zero
     datum = datum.with_columns([
-        pl.when(all_zero).then(None).otherwise(pl.col(col)).alias(col)
+        pl.when(~all_zero).then(pl.col(f'rad_{col}')).alias(f'rad_{col}')
         for col in quadrant_cols
     ])
 
@@ -175,20 +121,21 @@ def read_adeck(fname: str):
     datum = datum.with_columns([
                         pl.when(pl.col('rad')==r).then(pl.col(f'rad_{y}')).alias(f'rad{r}_{y}')
                         for r in ['34', '50', '64']
-                        for y in ['NEQ', 'NWQ', 'SEQ', 'SWQ']
+                        for y in quadrant_cols
                         ])
 
     # Aggregate columns
     aggmethod = {
-        pl.datatypes.Utf8: pl.first,
+        pl.datatypes.Categorical: pl.first,
+        pl.datatypes.String: pl.first,
         pl.datatypes.Int64: pl.mean,
         pl.datatypes.Float64: pl.mean,
         pl.datatypes.Datetime: pl.first,
     }
     grouper = ["basin", "number", "datetime", "tech", "tau"]
-    exclude_cols = ["rad", "windcode",]
+    exclude_cols = ["rad", "windcode",'rad_NEQ', 'rad_SEQ', 'rad_SWQ', 'rad_NWQ']
     agg_dict = [aggmethod.get(dtype, pl.first)(name)
-                for name, dtype in zip(datum.columns, datum.dtypes)
+                for name, dtype in zip( datum.collect_schema().names(), datum.collect_schema().dtypes())
                 if name not in grouper+exclude_cols]
 
     decker = (datum
@@ -196,200 +143,17 @@ def read_adeck(fname: str):
               .agg(agg_dict)
     )
 
-
     # Stretch out the stormname across neighboring rows
-    decker = datum.with_columns([
-        pl.col("stormname").forward_fill().backward_fill().alias("stormname")
-    ])
+    # decker = decker.with_columns([
+    #     pl.col("stormname").forward_fill().backward_fill().alias("stormname")
+    # ])
 
     return decker
 
 
-def read_bdeck(fname: str):
+def read_bdeck(fname: str | Path) -> pl.DataFrame:
     """Read bdeck from filename into pandas dataframe"""
     return read_adeck(fname)
-
-
-class AdeckEntry:
-    def __init__(self):
-        self.data_store = {
-            "basin": {
-                "data": [],
-            },
-            "number": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "datetime": {
-                "data": [],
-                "converter": datetimeconverter(datetime_format="%Y%m%d%H"),
-            },
-            "tnum": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "tech": {
-                "data": [],
-            },
-            "tau": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "lat": {
-                "data": [],
-                "converter": latlonconverter(scale=0.1),
-            },
-            "lon": {
-                "data": [],
-                "converter": latlonconverter(scale=0.1),
-            },
-            "vmax": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "mslp": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "type": {
-                "data": [],
-            },
-            "rad": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "windcode": {
-                "data": [],
-            },
-            "rad_NEQ": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "rad_SEQ": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "rad_SWQ": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "rad_NWQ": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "pouter": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "router": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "rmw": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "gusts": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "eye": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "subregion": {
-                "data": [],
-            },
-            "maxseas": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "initials": {
-                "data": [],
-            },
-            "direction": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "speed": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "stormname": {
-                "data": [],
-            },
-            "depth": {
-                "data": [],
-            },
-            "seas": {"data": [], "converter": int_converter()},
-            "seascode": {
-                "data": [],
-            },
-            "seas1": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "seas2": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "seas3": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "seas4": {
-                "data": [],
-                "converter": int_converter(),
-            },
-            "userdefined1": {
-                "data": [],
-            },
-            "userdata1": {
-                "data": [],
-            },
-            "userdefined2": {
-                "data": [],
-            },
-            "userdata2": {
-                "data": [],
-            },
-            "userdefined3": {
-                "data": [],
-            },
-            "userdata3": {
-                "data": [],
-            },
-            "userdefined4": {
-                "data": [],
-            },
-            "userdata4": {
-                "data": [],
-            },
-            "userdefined5": {
-                "data": [],
-            },
-            "userdata5": {
-                "data": [],
-            },
-        }
-
-    def append(self, values):
-        for key, val in zip_longest(self.data_store.keys(), values, fillvalue=""):
-            self.data_store[key]["data"].append(val)
-
-    def pd_parse(self, key, converter, raw_data):
-        if "converter" in converter:
-            raw_data[key] = converter['converter'](raw_data[key])
-
-    def to_dataframe(self):
-        raw_data = {
-            key: np.array(self.data_store[key]["data"], dtype=object) for key in self.data_store
-        }
-        for key, converter in self.data_store.items():
-            self.pd_parse(key, converter, raw_data)
-            # if "converter" in converter:
-                # raw_data[key] = self.pd_parse(converter, raw_data[key])
-        return pd.DataFrame(raw_data)
 
 
 def write_adeck(outf, deck):
@@ -439,6 +203,8 @@ def main(input_filepath):
 
     stime = time.time()
     deck = read_adeck(input_filepath)
+    deck = deck.select(['lat', 'lon', 'datetime', 'basin', 'number', 'tech', 'tau', 'stormname']).collect()
+    # deck = deck.collect()
     print(time.time() - stime)
 
     print(deck)
@@ -462,4 +228,4 @@ def main(input_filepath):
 if __name__ == "__main__":
     datadir = Path(__file__).parent.parent.parent.parent / "data"
     print(datadir)
-    main(datadir / "aal032023.dat")
+    main(datadir / "aal032023.dat.gz")
