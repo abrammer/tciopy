@@ -156,6 +156,18 @@ def read_bdeck(fname: str | Path) -> pl.DataFrame:
     return read_adeck(fname)
 
 
+def read_adecks(fnames: list[str | Path]) -> pl.DataFrame:
+    """Read multiple adeck files into a single pandas dataframe"""
+    with pl.StringCache():
+        return pl.concat([read_adeck(fname) for fname in fnames])
+
+
+def read_bdecks(fnames: list[str | Path]) -> pl.DataFrame:
+    """Read multiple bdeck files into a single pandas dataframe"""
+    with pl.StringCache():
+        return pl.concat([read_bdeck(fname) for fname in fnames])
+
+
 def write_adeck(outf, deck):
     for row in deck.itertuples():
         for line in format_adeck_line(row):
