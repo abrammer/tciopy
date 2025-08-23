@@ -2,16 +2,11 @@
 Read and write ATCF a or b deck files
 """
 import re
-# from dataclasses import dataclass
-# from datetime import datetime
 from pathlib import Path
-from itertools import zip_longest
 import numpy as np
 import polars as pl
 import polars.selectors as cs
 
-# from tciopy.converters import DatetimeConverter, IntConverter, LatLonConverter, StrConverter
-from tciopy.converters import datetimeconverter, int_converter, latlonconverter
 
 adeck_schema = pl.Schema({
     "basin": pl.Categorical(),
@@ -158,14 +153,14 @@ def read_bdeck(fname: str | Path) -> pl.DataFrame:
 
 def read_adecks(fnames: list[str | Path]) -> pl.DataFrame:
     """Read multiple adeck files into a single pandas dataframe"""
-    with pl.StringCache():
-        return pl.concat([read_adeck(fname) for fname in fnames])
+    pl.enable_string_cache()
+    return pl.concat([read_adeck(fname) for fname in fnames])
 
 
 def read_bdecks(fnames: list[str | Path]) -> pl.DataFrame:
     """Read multiple bdeck files into a single pandas dataframe"""
-    with pl.StringCache():
-        return pl.concat([read_bdeck(fname) for fname in fnames])
+    pl.enable_string_cache()
+    return pl.concat([read_bdeck(fname) for fname in fnames])
 
 
 def write_adeck(outf, deck):
