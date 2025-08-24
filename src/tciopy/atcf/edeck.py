@@ -59,8 +59,8 @@ def read_edeck(fname: str, format_filter: list[str] = None) -> pl.DataFrame:
 #   Eyeway Replacement forecast probabilities
 
 edeck_base_schema = {
-    "basin": pl.Categorical(),
-    "number": pl.Categorical(), #: Storm number,  2 char. [can be alphanumeric for pregenesis]
+    "basin": pl.String,
+    "number": pl.String, #: Storm number,  2 char. [can be alphanumeric for pregenesis]
     "datetime": pl.String,  #: Fix date-time-group,                 12 char.
     #: ProbFormat - 2 char.
         #:*   TR - track, "03" also accepted for existing old edeck files
@@ -72,7 +72,7 @@ edeck_base_schema = {
         #:*   GN - TC genesis probability
         #:*   GS - TC genesis shape
         #:*   ER - eyewall replacement
-    "format": pl.Categorical(),
+    "format": pl.String,
     "tech": pl.String,        #: Tech - acronym for each objective technique,  4 char.
     "tau": pl.Int16,    # TAU - forecast period: 0 through 168 hours,  3 char.
     "lat": pl.String,    # LatN/S - Latitude (tenths of degrees) for the DTG: 0 through 900, N/S is the hemispheric index,  4 char.
