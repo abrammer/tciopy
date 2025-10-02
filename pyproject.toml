@@ -9,6 +9,10 @@ authors = [
     {name = "Alan Brammer", email = "a1brammer@gmail.com"},
 ]
 dynamic = ["version"]
+dependencies = [
+    'polars',
+    'pandas',
+]
 
 [options]
 python_requires = ">=3.9"

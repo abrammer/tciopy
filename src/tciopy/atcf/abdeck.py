@@ -125,6 +125,7 @@ def read_adeck(fname: str | Path) -> pl.DataFrame:
         pl.datatypes.String: pl.first,
         pl.datatypes.Int64: pl.mean,
         pl.datatypes.Float64: pl.mean,
+        pl.datatypes.Float32: pl.mean,
         pl.datatypes.Datetime: pl.first,
     }
     grouper = ["basin", "number", "datetime", "tech", "tau"]
@@ -134,7 +135,7 @@ def read_adeck(fname: str | Path) -> pl.DataFrame:
                 if name not in grouper+exclude_cols]
 
     decker = (datum
-              .group_by(["basin", "number", "datetime", "tech", "tau"], maintain_order=True)
+              .group_by(grouper, maintain_order=True)
               .agg(agg_dict)
     )
 
