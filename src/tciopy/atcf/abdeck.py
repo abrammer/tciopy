@@ -7,7 +7,6 @@ import numpy as np
 import polars as pl
 import polars.selectors as cs
 
-
 adeck_schema = pl.Schema({
     "basin": pl.String,
     "number": pl.String,
@@ -73,10 +72,8 @@ def tolatlon(dataframe: pl.DataFrame,
     ])
 
 
-def read_adeck(fname: str | Path) -> pl.DataFrame:
-    """Read adeck from filename into pandas dataframe"""
-    # Tried versions of parsing colums in the read_csv func and they were much
-    # slower
+def read_adeck(fname: str | Path, return_type:str='polars' ) -> pl.DataFrame:
+    """Read adeck from filename into polars dataframe"""
 
     datum = pl.scan_csv(fname, schema=adeck_schema, truncate_ragged_lines=True, has_header=False)
     datum = datum.with_columns(cs.string().str.strip_chars())
@@ -86,9 +83,7 @@ def read_adeck(fname: str | Path) -> pl.DataFrame:
     ])
     datum = tolatlon(datum)
 
-    #  Quicker to process dates in series after than as a converter
-    # datum["datetime"] = pd.to_datetime(datum["datetime"], format="%Y%m%d%H")
-    # best_lines = datum["tech"] == "BEST"
+    # Best Lines reuse the TNUM column for minutes.
     datum = datum.with_columns([
         pl.when(pl.col("tech") == "BEST")
         .then(pl.col("datetime") + pl.duration(minutes=pl.col("tnum").fill_null(0)))
@@ -102,8 +97,9 @@ def read_adeck(fname: str | Path) -> pl.DataFrame:
     ])
 
     datum = datum.with_columns((pl.col("datetime") + pl.col('tau')).alias("validtime"))
-
     quadrant_cols = ["NWQ", "NEQ", "SEQ", "SWQ"]
+
+    # if mask_radii:
     all_zero = (pl.col("rad_NWQ") == 0) & (pl.col("rad_NEQ") == 0) & (pl.col("rad_SEQ") == 0) & (pl.col("rad_SWQ") == 0)
 
     # Set quadrant columns to null if all are zero
@@ -111,27 +107,17 @@ def read_adeck(fname: str | Path) -> pl.DataFrame:
         pl.when(~all_zero).then(pl.col(f'rad_{col}')).alias(f'rad_{col}')
         for col in quadrant_cols
     ])
-
     # Rename quadrant columns based on 'rad' value
     datum = datum.with_columns([
                         pl.when(pl.col('rad')==r).then(pl.col(f'rad_{y}')).alias(f'rad{r}_{y}')
                         for r in ['34', '50', '64']
                         for y in quadrant_cols
                         ])
-
     # Aggregate columns
-    aggmethod = {
-        pl.datatypes.Categorical: pl.first,
-        pl.datatypes.String: pl.first,
-        pl.datatypes.Int64: pl.mean,
-        pl.datatypes.Float64: pl.mean,
-        pl.datatypes.Float32: pl.mean,
-        pl.datatypes.Datetime: pl.first,
-    }
     grouper = ["basin", "number", "datetime", "tech", "tau"]
-    exclude_cols = ["rad", "windcode",'rad_NEQ', 'rad_SEQ', 'rad_SWQ', 'rad_NWQ']
-    agg_dict = [aggmethod.get(dtype, pl.first)(name)
-                for name, dtype in zip( datum.collect_schema().names(), datum.collect_schema().dtypes())
+    exclude_cols = ['rad','rad_NEQ', 'rad_SEQ', 'rad_SWQ', 'rad_NWQ']
+    agg_dict = [pl.col(name).drop_nulls().first().alias(name)
+                for name in  datum.collect_schema().names()
                 if name not in grouper+exclude_cols]
 
     decker = (datum
@@ -139,12 +125,12 @@ def read_adeck(fname: str | Path) -> pl.DataFrame:
               .agg(agg_dict)
     )
 
-    # Stretch out the stormname across neighboring rows
-    # decker = decker.with_columns([
-    #     pl.col("stormname").forward_fill().backward_fill().alias("stormname")
-    # ])
 
-    return decker
+    if return_type == 'pandas':
+        import pandas as pd
+        return decker.collect().to_pandas()
+    else:
+        return decker
 
 
 def read_bdeck(fname: str | Path) -> pl.DataFrame:
@@ -164,45 +150,73 @@ def read_bdecks(fnames: list[str | Path]) -> pl.DataFrame:
     return pl.concat([read_bdeck(fname) for fname in fnames])
 
 
-def write_adeck(outf, deck):
-    for row in deck.itertuples():
+def write_adeck(outf, deck: pl.DataFrame):
+    # Accept either a LazyFrame or a collected DataFrame
+    if isinstance(deck, pl.LazyFrame):
+        deck = deck.collect()
+    for row in deck.iter_rows(named=True):
         for line in format_adeck_line(row):
-            line = line[:95] + re.sub(r"(, )[\s,0]+$", ", ", line[95:])
-            line = line.rstrip(r"\n")
+            line = line.rstrip("\n")
             outf.write(f"{line}\n")
+        outf.write("")
 
 
 def fillnan(val, nafill=0):
-    if pd.isna(val):
+    if val is None or (isinstance(val, float) and np.isnan(val)):
         return nafill
     return val
 
 
 def format_adeck_line(row):
     """Format a single row of a dataframe into an adeck line"""
+    reg = re.compile(r"[a-zA-Z1-9]")
+    carq0 = row['tech'] == 'CARQ' and row['tau'].total_seconds() == 0
+    line = (
+        f"{row["basin"]}, {row["number"]:>2}, {row["datetime"]:%Y%m%d%H}, "
+        f"{row["tnum"]:02.0f}, {row["tech"]:>4}, {row["tau"].total_seconds()/3600:3.0f}, "
+        f"{fillnan(abs(row["lat"])*10):3.0f}{'N' if row["lat"]>=0 else 'S'}, "
+        f"{fillnan(abs(row["lon"])*10):4.0f}{'E' if row["lon"]>0 else 'W'},"
+        f"{fillnan(row["vmax"]):4.0f}, ")
+
+    extra2 = (
+        f"{fillnan(row["pouter"]):4.0f}, {fillnan(row["router"]):4.0f}, {fillnan(row["rmw"]):3.0f}, {fillnan(row["gusts"]):3.0f}, "
+        f"{fillnan(row["eye"]):3.0f},{fillnan(row["subregion"],""):>4},{fillnan(row["maxseas"]):4.0f}, {fillnan(row["initials"],""):>3}, "
+        f"{fillnan(row["direction"]):3.0f},{fillnan(row["speed"]):4.0f}, ")
+    extra2a = f"{fillnan(row["stormname"],""):>10}, {fillnan(row["depth"],""):>1},"
+    extra3 = (
+        f"{fillnan(row['seas'], 0):3.0f}, {fillnan(row["seascode"],nafill=""):>3}, {fillnan(row["seas1"]):4.0f}, {fillnan(row["seas2"]):4.0f}, "
+        f"{fillnan(row["seas3"]):4.0f}, {fillnan(row["seas4"]):4.0f}, ")
+    for i in range(1,6):
+        userextra = f"{fillnan(row[f"userdefined{i}"], ""):>3}, {fillnan(row[f"userdata{i}"], ""):>1}, "
+        if reg.search(userextra):
+            extra3 += userextra
+        else:
+            break
+
+
     for kt in 34, 50, 64:
-        rad1 = np.max([getattr(row, f"rad{kt}_NEQ", 0), 0])
-        rad2 = np.max([getattr(row, f"rad{kt}_SEQ", 0), 0])
-        rad3 = np.max([getattr(row, f"rad{kt}_SWQ", 0), 0])
-        rad4 = np.max([getattr(row, f"rad{kt}_NWQ", 0), 0])
-        if (kt > 34) and ((set([rad1, rad2, rad3, rad4]) == {0}) or pd.isnull([rad1, rad2, rad3, rad4]).all()):
+        rad1 = row[f"rad{kt}_NEQ"] or 0
+        rad2 = row[f"rad{kt}_SEQ"] or 0
+        rad3 = row[f"rad{kt}_SWQ"] or 0
+        rad4 = row[f"rad{kt}_NWQ"] or 0
+        if(not carq0) and (kt > 34) and \
+            ((set([rad1, rad2, rad3, rad4]) == {0}) or np.isnan([rad1, rad2, rad3, rad4]).all()):
             continue
-        line = (
-            f"{row.basin}, {row.number:>2}, {row.datetime:%Y%m%d%H}, "
-            f"{row.tnum:02.0f}, {row.tech:>4}, {row.tau:3.0f}, "
-            f"{fillnan(abs(row.lat)*10):3.0f}{'N' if row.lat>0 else 'S'}, "
-            f"{fillnan(abs(row.lon)*10):4.0f}{'E' if row.lon>0 else 'W'},"
-            f"{fillnan(row.vmax):4.0f}, {fillnan(row.mslp):4.0f}, {row.type:>2}, "
-            f"{kt:3}, NEQ, {fillnan(rad1):4.0f}, {fillnan(rad2):4.0f}, {fillnan(rad3):4.0f}, {fillnan(rad4):4.0f}, "
-            f"{fillnan(row.pouter):4.0f}, {fillnan(row.router):4.0f}, {fillnan(row.rmw):3.0f}, {fillnan(row.gusts):3.0f}, "
-            f"{fillnan(row.eye):3.0f},{row.subregion:>4},{fillnan(row.maxseas):4.0f}, {row.initials:>3}, "
-            f"{fillnan(row.direction):3.0f},{fillnan(row.speed):4.0f}, {row.stormname:>10}, {row.depth:>1}, "
-            f"{fillnan(row.seas):4.0f}, {row.seascode:>3}, {fillnan(row.seas1):4.0f}, {fillnan(row.seas2):4.0f}, "
-            f"{fillnan(row.seas3):4.0f}, {fillnan(row.seas4):4.0f}, {row.userdefined1:>4}, {row.userdata1:>4}, "
-            f"{row.userdefined2:>4}, {row.userdata2:>4}, {row.userdefined3:>4}, {row.userdata3:>4}, "
-            f"{row.userdefined4:>4}, {row.userdata4:>4}, {row.userdefined5:>4}, {row.userdata5:>4}"
-        )
-        yield line
+        if row['windcode'] == "":
+            kt = 0
+        extra1 = (f"{fillnan(row["mslp"]):4.0f}, {row["type"]:>2}, "
+            f"{kt:3}, {row['windcode']:>3}, {fillnan(rad1):4.0f}, {fillnan(rad2):4.0f}, {fillnan(rad3):4.0f}, {fillnan(rad4):4.0f}, ")
+
+        # if extra3 contains valid data include all three extras
+        if reg.search(extra3):
+            retline = line + extra1 + extra2 + extra2a + extra3
+        elif reg.search(extra2a):
+            retline = line + extra1 + extra2 + extra2a
+        elif reg.search(extra2):
+            retline = line + extra1 + extra2
+        else:
+            retline = line + extra1
+        yield retline
 
 
 def main(input_filepath):
