@@ -7,7 +7,7 @@ from itertools import zip_longest
 from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
+import polars as pl
 import numpy as np
 from tciopy.atcf.decks import BaseDeck
 from tciopy.converters import StringColumn, NumericColumn, CategoricalColumn, LatLonColumn, DatetimeColumn
@@ -15,8 +15,8 @@ from tciopy.converters import StringColumn, NumericColumn, CategoricalColumn, La
 from tciopy.converters import datetimeconverter, int_converter, latlonconverter, categoricalconverter
 
 
-def read_fdeck(fname: str) -> pd.DataFrame:
-    """Read an f-deck file into a pandas DataFrame"""
+def read_fdeck(fname: str) -> pl.DataFrame:
+    """Read an f-deck file into a polars DataFrame"""
     if not isinstance(fname, Path):
         fname = Path(fname)
 
@@ -41,7 +41,7 @@ def read_fdeck(fname: str) -> pd.DataFrame:
             alldata[ftype].append(splitline)
 
     dfs = [value.to_dataframe() for value in alldata.values()]
-    df = pd.concat(dfs, ignore_index=True, sort=False)
+    df = pl.concat(dfs, how="diagonal")
     return df
 
 

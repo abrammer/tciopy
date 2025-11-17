@@ -1,5 +1,5 @@
 """
-Reader for TC-CXML files, to unpack into a pandas dataframe matching column names for other readers
+Reader for TC-CXML files, to unpack into a polars dataframe matching column names for other readers
 
 // TODO: Handle the mixed units contained in cxml files.  
 """
@@ -7,7 +7,7 @@ import warnings
 import xml.etree.ElementTree as ET
 
 import numpy as np
-import pandas as pd
+import polars as pl
 
 
 CENTER_TO_TECH = {
@@ -63,9 +63,13 @@ def read_cxml(file_path):
                     data[key] = value
                 alldata.append(data)
 
-    df = pd.DataFrame.from_records(alldata)
-    df["validtime"] = pd.to_datetime(df.loc[:, "validtime"], format="%Y-%m-%dT%H:%M:%SZ")
-    df.loc[:, "datetime"] = df.loc[:, "validtime"] - pd.to_timedelta(df.loc[:, "tau"], unit="h")
+    df = pl.DataFrame(alldata)
+    df = df.with_columns([
+        pl.col("validtime").str.strptime(pl.Datetime, format="%Y-%m-%dT%H:%M:%SZ", strict=False),
+    ])
+    df = df.with_columns([
+        (pl.col("validtime") - pl.duration(hours=pl.col("tau"))).alias("datetime")
+    ])
 
     return df
 

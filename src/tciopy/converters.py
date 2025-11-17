@@ -1,13 +1,12 @@
-""" ATCF Converter classes for parsing ATCF data into pandas Series 
+""" ATCF Converter classes for parsing ATCF data into polars Series 
     Rather than converting each value seperately, these classes accumulate input data into a list,
-    and then convert the list to a pandas Series when pd_parse() is called.
+    and then convert the list to a polars Series when pd_parse() is called.
     This allows for more efficient parsing of the ATCF data.
 """
 
 # Note: For some reason it is faster to convert to a np.array as an intermediate step...
 
 import numpy as np
-import pandas as pd
 import polars as pl
 
 
@@ -33,9 +32,9 @@ def tolatlon(dataframe: pl.DataFrame,
 class StringColumn(list):
     "Default parser list to hold a list of strings"
 
-    def pd_parse(self) -> pd.Series:
-        "Return a pandas series of the list"
-        return pd.Series(self)
+    def pd_parse(self) -> pl.Series:
+        "Return a polars series of the list"
+        return pl.Series(self, dtype=pl.String)
 
 
 class NumericColumn(list):
@@ -45,8 +44,8 @@ class NumericColumn(list):
         super().__init__(args)
         self.scale = scale
 
-    def pd_parse(self) -> pd.Series:
-        "Return a pandas series of the list, converting empty strings to NaNs and scaling output"
+    def pd_parse(self) -> pl.Series:
+        "Return a polars series of the list, converting empty strings to NaNs and scaling output"
         x = np.array(self, dtype=object)
         mask = (x == "") | (x == "nan")
         z = np.empty(
@@ -55,14 +54,14 @@ class NumericColumn(list):
         )
         z[~mask] = x[~mask].astype(float)
         z[mask] = np.nan
-        return pd.Series(z * self.scale, dtype=float)
+        return pl.Series(z * self.scale, dtype=pl.Float64)
 
 
 class CategoricalColumn(list):
     "Categorical Parser list"
-    def pd_parse(self) -> pd.Series:
-        "Return a pandas series, dtype='category'"
-        return pd.Series(np.array(self, dtype=object), dtype="category")
+    def pd_parse(self) -> pl.Series:
+        "Return a polars series, dtype='Categorical'"
+        return pl.Series(np.array(self, dtype=object), dtype=pl.Categorical)
 
 
 class LatLonColumn(list):
@@ -75,12 +74,24 @@ class LatLonColumn(list):
         super().__init__(args)
         self.scale = scale
 
-    def pd_parse(self) -> pd.Series:
-        "Return a pandas series of numerical lat lon values [degrees]"
-        series = pd.Series(np.array(self, dtype=object))
-        hemisign = 1 - series.str.endswith(("W", "S")) * 2
-        ll = NumericColumn(*series.str[:-1]).pd_parse() * hemisign
-        return ll * self.scale
+    def pd_parse(self) -> pl.Series:
+        "Return a polars series of numerical lat lon values [degrees]"
+        # Create a dataframe to use with_columns expressions
+        df = pl.DataFrame({"raw": np.array(self, dtype=object)})
+        df = df.with_columns([
+            pl.col("raw").cast(pl.String).alias("raw")
+        ])
+        df = df.with_columns([
+            pl.col("raw").str.head(-1).cast(pl.Float64, strict=False).alias("num"),
+            (pl.col("raw").str.ends_with("W") | pl.col("raw").str.ends_with("S")).alias("is_negative")
+        ])
+        df = df.with_columns([
+            pl.when(pl.col("is_negative"))
+            .then(pl.col("num") * -1.0 * self.scale)
+            .otherwise(pl.col("num") * self.scale)
+            .alias("result")
+        ])
+        return df["result"]
 
 
 class DatetimeColumn(list):
@@ -93,9 +104,16 @@ class DatetimeColumn(list):
         super().__init__(args)
         self.datetime_format = datetime_format
 
-    def pd_parse(self) -> pd.Series:
-        "Return a pandas series of datetimes"
-        return pd.to_datetime(pd.Series(self), format=self.datetime_format)
+    def pd_parse(self) -> pl.Series:
+        "Return a polars series of datetimes"
+        s = pl.Series(self, dtype=pl.String)
+        # Polars requires both hour and minute, so if format doesn't have %M, append '00' for minutes
+        if '%M' not in self.datetime_format:
+            s = s + '00'
+            format_with_minutes = self.datetime_format + '%M'
+        else:
+            format_with_minutes = self.datetime_format
+        return s.str.strptime(pl.Datetime, format=format_with_minutes, strict=False)
 
 
 class int_converter:
@@ -118,10 +136,21 @@ class latlonconverter:
         self.scale = scale
 
     def __call__(self, series):
-        series = pd.Series(series)
-        hemisign = 1 - series.str.endswith(("W", "S")) * 2
-        ll = int_converter()(series.str[:-1]) * hemisign
-        return pd.Series(ll * self.scale)
+        df = pl.DataFrame({"raw": series})
+        df = df.with_columns([
+            pl.col("raw").cast(pl.String).alias("raw")
+        ])
+        df = df.with_columns([
+            pl.col("raw").str.head(-1).cast(pl.Float64, strict=False).alias("num"),
+            (pl.col("raw").str.ends_with("W") | pl.col("raw").str.ends_with("S")).alias("is_negative")
+        ])
+        df = df.with_columns([
+            pl.when(pl.col("is_negative"))
+            .then(pl.col("num") * -1.0 * self.scale)
+            .otherwise(pl.col("num") * self.scale)
+            .alias("result")
+        ])
+        return df["result"]
 
 
 class datetimeconverter:
@@ -129,7 +158,14 @@ class datetimeconverter:
         self.datetime_format = datetime_format
 
     def __call__(self, series):
-        return pd.to_datetime(series, format=self.datetime_format)
+        s = pl.Series(series, dtype=pl.String)
+        # Polars requires both hour and minute, so if format doesn't have %M, append '00' for minutes
+        if '%M' not in self.datetime_format:
+            s = s + '00'
+            format_with_minutes = self.datetime_format + '%M'
+        else:
+            format_with_minutes = self.datetime_format
+        return s.str.strptime(pl.Datetime, format=format_with_minutes, strict=False)
 
 
 class categoricalconverter:
@@ -137,5 +173,5 @@ class categoricalconverter:
         pass
 
     def __call__(self, series):
-        return pd.Categorical(series)
+        return pl.Series(series, dtype=pl.Categorical)
 
