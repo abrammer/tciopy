@@ -73,17 +73,18 @@ def read_adeck(fname: str | Path, return_type:str='polars' ) -> pl.DataFrame:
     # Best Lines reuse the TNUM column for minutes.
     datum = datum.with_columns([
         pl.when(pl.col("tech") == "BEST")
-        .then(pl.col("datetime") + pl.duration(minutes=pl.col("tnum").fill_null(0)))
-        .otherwise(pl.col("datetime"))
-        .alias("datetime"),
+            .then(pl.col("datetime") + pl.duration(minutes=pl.col("tnum").fill_null(0)))
+            .otherwise(pl.col("datetime"))
+            .alias("datetime"),
         pl.when((pl.col("tech") == "BEST") & pl.col("tnum").is_null())
-        .then(0)
-        .otherwise(pl.col("tnum"))
-        .alias("tnum"),
+            .then(0)
+            .otherwise(pl.col("tnum"))
+            .alias("tnum"),
         pl.duration(hours=pl.col("tau")).alias("tau"),
-    ])
+    ]).with_columns(
+        validtime = pl.col("datetime") + pl.col('tau'))
+    )
 
-    datum = datum.with_columns((pl.col("datetime") + pl.col('tau')).alias("validtime"))
     quadrant_cols = ["NWQ", "NEQ", "SEQ", "SWQ"]
 
     # if mask_radii:
@@ -111,7 +112,6 @@ def read_adeck(fname: str | Path, return_type:str='polars' ) -> pl.DataFrame:
               .group_by(grouper, maintain_order=True)
               .agg(agg_dict)
     )
-
 
     if return_type == 'pandas':
         import pandas as pd
