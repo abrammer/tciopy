@@ -1,12 +1,10 @@
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 import pathlib
-import subprocess
-import warnings
 import logging
 import itertools
 
-import pandas as pd
+import polars as pl
 import numpy as np
 
 from eccodes import (codes_bufr_new_from_file, codes_get, codes_set,
@@ -14,12 +12,14 @@ from eccodes import (codes_bufr_new_from_file, codes_get, codes_set,
                      CODES_MISSING_LONG, codes_release)
 import gribapi
 
+## to do refactor this to less assumptive and more polars friendly. 
+## bufr -> to_json -> polars dataframe. ??
 
 LOGGER = logging.getLogger(__name__)
 
 def add_constants(kwargs, df):
     for key, value in kwargs.items():
-        df[key] = value
+        df = df.with_columns(pl.lit(value).alias(key))
     return df
 
 
@@ -76,7 +76,7 @@ def get_analysis_data(bufr, member_number):
     # Observed Storm Centre
     # significance = codes_get(bufr, '#1#meteorologicalAttributeSignificance')
     # Location of storm in perturbed analysis
-    temp_df = pd.DataFrame({'member': member_number,})
+    temp_df = pl.DataFrame({'member': member_number,})
 
     try:
         lat, lon, loc_prefix = get_location(bufr, 2)
@@ -85,21 +85,21 @@ def get_analysis_data(bufr, member_number):
         LOGGER.info("No pertubed location found")
         lat, lon, loc_prefix = get_location(bufr, 1)
         LOGGER.debug("Observed latitude %s, longitude %s", lat, lon)
-    expand_value(f'{loc_prefix}latitude', lat, temp_df)
-    expand_value(f'{loc_prefix}longitude', lon, temp_df)
+    temp_df = expand_value(f'{loc_prefix}latitude', lat, temp_df)
+    temp_df = expand_value(f'{loc_prefix}longitude', lon, temp_df)
 
     pressure_analysis = codes_get_array(bufr, '#1#pressureReducedToMeanSeaLevel')
     pressure_units = codes_get(bufr, '#1#pressureReducedToMeanSeaLevel->units')
-    expand_value(f'mslp_[{pressure_units}]', pressure_analysis, temp_df)
+    temp_df=expand_value(f'mslp_[{pressure_units}]', pressure_analysis, temp_df)
 
     # Location of Maximum Wind
     wind_max_wind0 = codes_get_array(bufr, '#1#windSpeedAt10M')
     wind_units = codes_get(bufr, '#1#windSpeedAt10M->units')
-    expand_value(f'vmax_[{wind_units}]', wind_max_wind0, temp_df)
+    temp_df=expand_value(f'vmax_[{wind_units}]', wind_max_wind0, temp_df)
 
     lat, lon, loc_prefix = get_location(bufr, 3)
-    expand_value(f'{loc_prefix}latitude', lat, temp_df)
-    expand_value(f'{loc_prefix}longitude', lon, temp_df)
+    temp_df= expand_value(f'{loc_prefix}latitude', lat, temp_df)
+    temp_df= expand_value(f'{loc_prefix}longitude', lon, temp_df)
 
     try:
         radii = get_wind_radii(bufr, 0)
@@ -107,17 +107,19 @@ def get_analysis_data(bufr, member_number):
         LOGGER.info("No wind radii found")
         pass
         # radii = {'rad34_1':[0], 'rad34_2':[0], 'rad34_3':[0], 'rad34_4':[0]}
-    expand_value('tau', [0], temp_df)
+    temp_df=expand_value('tau', [0], temp_df)
     for key,val in radii.items():
-        expand_value(key, val, temp_df)
+        temp_df=expand_value(key, val, temp_df)
     return temp_df
 
 
 def expand_value(key, values, df):
     if len(values) != len(df):
-        df[key] = values[0]
+        df = df.with_columns(pl.lit(values[0]).alias(key))
     else:
-        df[key] = values
+        df = df.with_columns(pl.Series(values).alias(key))
+    return df
+
 
 
 def extract_timeperiod(i, bufr, members):
@@ -128,23 +130,23 @@ def extract_timeperiod(i, bufr, members):
 
     LOGGER.debug("Extracting time period %s with ranks %s,%s", i,centerdata_rank , centerloc_rank)
 
-    temp_df = pd.DataFrame({'member': members,})
+    temp_df = pl.DataFrame({'member': members,})
 
     time_period = codes_get_array(bufr, "#%d#timePeriod" % i)
-    expand_value('tau', time_period, temp_df)
+    temp_df = expand_value('tau', time_period, temp_df)
 
     press = codes_get_array(bufr, "#%d#pressureReducedToMeanSeaLevel" % centerdata_rank)
     press_units = codes_get(bufr, "#%d#pressureReducedToMeanSeaLevel->units" % centerdata_rank)
     wind10m = codes_get_array(bufr, "#%d#windSpeedAt10M" % centerdata_rank)
     wind_units = codes_get(bufr, "#%d#windSpeedAt10M->units" % centerdata_rank)
-    expand_value(f'vmax_[{wind_units}]', wind10m, temp_df)
-    expand_value(f'mslp_[{press_units}]', press, temp_df)
+    temp_df = expand_value(f'vmax_[{wind_units}]', wind10m, temp_df)
+    temp_df = expand_value(f'mslp_[{press_units}]', press, temp_df)
 
     # Location of the storm
     try:
         lat, lon, loc_prefix = get_location(bufr, centerloc_rank)
-        expand_value(f'{loc_prefix}latitude', lat, temp_df)
-        expand_value(f'{loc_prefix}longitude', lon, temp_df)
+        temp_df = expand_value(f'{loc_prefix}latitude', lat, temp_df)
+        temp_df = expand_value(f'{loc_prefix}longitude', lon, temp_df)
         LOGGER.debug("Extracted center location @ %s, %s", lat, lon)
     except ValueError as exc:
         LOGGER.debug("No center data time:%s, rank:%s", i, centerloc_rank)
@@ -152,8 +154,8 @@ def extract_timeperiod(i, bufr, members):
 
     try:
         lat, lon, loc_prefix = get_location(bufr, maxwndloc_rank)
-        expand_value(f'{loc_prefix}latitude', lat, temp_df)
-        expand_value(f'{loc_prefix}longitude', lon, temp_df)
+        temp_df = expand_value(f'{loc_prefix}latitude', lat, temp_df)
+        temp_df = expand_value(f'{loc_prefix}longitude', lon, temp_df)
         LOGGER.debug("Extracted max wind %s @ %s, %s", wind10m, lat, lon)
     except ValueError as exc:
         LOGGER.debug("No max wind data time:%s, rank:%s", i, maxwndloc_rank)
@@ -162,7 +164,7 @@ def extract_timeperiod(i, bufr, members):
     try:
         radii = get_wind_radii(bufr, i)
         for key, val in radii.items():
-            expand_value(key, val, temp_df)
+            temp_df = expand_value(key, val, temp_df)
     except gribapi.errors.KeyValueNotFoundError:
         LOGGER.info("No wind radii found time: %s", i)
         pass
@@ -170,7 +172,7 @@ def extract_timeperiod(i, bufr, members):
     return temp_df
 
 
-def read_bufr(filepath:pathlib.Path) -> pd.DataFrame:
+def read_bufr(filepath:pathlib.Path) -> pl.DataFrame:
     """
     Read a BUFR file and return a DataFrame.
 
@@ -228,9 +230,18 @@ def read_bufr(filepath:pathlib.Path) -> pd.DataFrame:
             # release the BUFR message
             codes_release(bufr)
 
-        # close the BUFR file
-    all_df = pd.concat(data, sort=False)
-    all_df = all_df[(all_df != CODES_MISSING_DOUBLE) & (all_df != CODES_MISSING_LONG)]
+    # close the BUFR file
+    all_df = pl.concat(data, how='diagonal')
+    all_df = all_df.with_columns(
+        pl.col(pl.Float64).replace(CODES_MISSING_DOUBLE, None),
+        pl.col(pl.Int64).replace(CODES_MISSING_LONG, None),
+        )
+    # remove rows with all missing data except member
+    all_df = all_df.filter(~(
+        pl.all_horizontal(
+            pl.exclude('member').is_null()
+        )
+    ))
     return all_df
 
 
@@ -245,5 +256,6 @@ if __name__ == "__main__":
     LOGGER.info("Read %s rows", len(df))
     # Save the DataFrame to a CSV file
     LOGGER.info("Saving DataFrame to CSV file: %s", input_filepath.with_suffix('.csv'))
-    df.fillna(-999).to_csv(input_filepath.with_suffix('.csv'),  float_format="%9.1f", index=False)
+    df.write_csv(input_filepath.with_suffix('.csv'), float_scientific=False, float_precision=1)
+    
     # print(df)
