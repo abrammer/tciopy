@@ -64,12 +64,11 @@ def read_cxml(file_path):
                 alldata.append(data)
 
     datum = pl.DataFrame(alldata)
-    datum = datum.with_columns([
-            pl.col("validtime").str.strptime(pl.Datetime, "%Y-%m-%dT%H:%M:%SZ").alias("validtime"),
-            ],
-            ).with_columns([
-            (pl.col('validtime') - pl.duration(hours=pl.col('tau'))).alias('datetime')
-            ],
+    datum = datum.with_columns(
+                validtime = pl.col("validtime").str.strptime(pl.Datetime, "%Y-%m-%dT%H:%M:%SZ"),
+                tau = pl.duration(hours=pl.col("tau")),
+            ).with_columns(
+                datetime = (pl.col('validtime') - pl.col('tau')),
             )
     return datum
 
