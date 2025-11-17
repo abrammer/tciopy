@@ -11,7 +11,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def read_edeck(fname: str, format_filter: list[str] = None) -> dict[str, pl.DataFrame]:
-    """Read an f-deck file into a polars DataFrame
+    """Read an e-deck file into a polars DataFrame
     Parameters
     ----------
     fname : str or Path
@@ -33,7 +33,8 @@ def read_edeck(fname: str, format_filter: list[str] = None) -> dict[str, pl.Data
         opener = gzip.open
     else:
         opener = open
-    allformats = ["TR", "IN", "RI", "RW", "WR", "PR", "GN", "GS", "ER"]
+        
+    allformats = edeck_schemas.keys()
     alldata = {key: [] for key in allformats if not format_filter or key in format_filter}
     with opener(fname, "rt", newline="\n") as io_file:
         for line in io_file:
@@ -45,6 +46,8 @@ def read_edeck(fname: str, format_filter: list[str] = None) -> dict[str, pl.Data
             if ftype == "03":
                 ftype = "TR"
             if ftype not in alldata:
+                continue
+            if ftype not in edeck_schemas:
                 LOGGER.warning("Unrecognised type in edeck line from %s \n %s", fname, line)
             alldata[ftype].append(splitline)
 
