@@ -1,15 +1,31 @@
 import gzip
 import re
 from pathlib import Path
+import logging
 
 import polars as pl
 
 from tciopy.converters import tolatlon
 
+LOGGER = logging.getLogger(__name__)
 
 
-def read_edeck(fname: str, format_filter: list[str] = None) -> pl.DataFrame:
-    """Read an f-deck file into a polars DataFrame"""
+def read_edeck(fname: str, format_filter: list[str] = None) -> dict[str, pl.DataFrame]:
+    """Read an f-deck file into a polars DataFrame
+    Parameters
+    ----------
+    fname : str or Path
+        Path to the edeck file. Can be gzipped.
+    
+    format_filter : list of str, optional
+        List of edeck formats to read. If None, all formats are read.
+        Valid formats are: "TR", "IN", "RI", "RW", "WR", "PR", "GN", "GS", "ER"
+    
+    Returns
+    -------
+    dict[str, pl.DataFrame]
+        Dictionary of Polars DataFrames containing the edeck data, keyed by format.
+    """
     if not isinstance(fname, Path):
         fname = Path(fname)
 
@@ -21,12 +37,15 @@ def read_edeck(fname: str, format_filter: list[str] = None) -> pl.DataFrame:
     alldata = {key: [] for key in allformats if not format_filter or key in format_filter}
     with opener(fname, "rt", newline="\n") as io_file:
         for line in io_file:
-            splitline = re.split(r",\s+", line)
+            try:
+                splitline = re.split(r",\s+", line)
+            except ValueError as e:
+                LOGGER.warning("Failed to parse edeck line from %s \n %s",fname, line)
             ftype = splitline[3]
             if ftype == "03":
                 ftype = "TR"
             if ftype not in alldata:
-                continue
+                LOGGER.warning("Unrecognised type in edeck line from %s \n %s", fname, line)
             alldata[ftype].append(splitline)
 
     dfs = {}
