@@ -239,7 +239,7 @@ def read_bufr(filepath:pathlib.Path) -> pl.DataFrame:
     # remove rows with all missing data except member
     all_df = all_df.filter(~(
         pl.all_horizontal(
-            pl.exclude('member').is_null()
+            pl.exclude('member', 'storm_name', 'tau', 'storm_identifier', 'model', 'analysis_datetime').is_null()
         )
     ))
     return all_df
