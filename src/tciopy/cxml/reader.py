@@ -7,7 +7,7 @@ import warnings
 import xml.etree.ElementTree as ET
 
 import numpy as np
-import pandas as pd
+import polars as pl
 
 
 CENTER_TO_TECH = {
@@ -63,11 +63,15 @@ def read_cxml(file_path):
                     data[key] = value
                 alldata.append(data)
 
-    df = pd.DataFrame.from_records(alldata)
-    df["validtime"] = pd.to_datetime(df.loc[:, "validtime"], format="%Y-%m-%dT%H:%M:%SZ")
-    df.loc[:, "datetime"] = df.loc[:, "validtime"] - pd.to_timedelta(df.loc[:, "tau"], unit="h")
-
-    return df
+    datum = pl.DataFrame(alldata)
+    datum = datum.with_columns([
+            pl.col("validtime").str.strptime(pl.Datetime, "%Y-%m-%dT%H:%M:%SZ").alias("validtime"),
+            ],
+            ).with_columns([
+            (pl.col('validtime') - pl.duration(hours=pl.col('tau'))).alias('datetime')
+            ],
+            )
+    return datum
 
 
 def _get_tech(center, member):
@@ -95,7 +99,7 @@ def main():
 
     datadir = Path(__file__).parent.parent.parent.parent / "data"
     df = read_cxml(datadir / "complete_cxml.xml")
-    print(df)
+    print(df.select('validtime', 'tau', 'datetime'))
     # print(df.dtypes)
 
 
