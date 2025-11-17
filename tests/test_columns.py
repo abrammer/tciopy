@@ -1,4 +1,4 @@
-import polars as pl
+import pandas as pd
 import numpy as np
 
 from tciopy import converters
@@ -10,8 +10,8 @@ def test_num_column():
     col.append("2")
     col.append("3")
     ret_series = col.pd_parse()
-    exp_series = pl.Series([1, 2, 3], dtype=pl.Float64)
-    assert ret_series.equals(exp_series)
+    exp_series = pd.Series([1, 2, 3], dtype=float)
+    pd.testing.assert_series_equal(ret_series, exp_series)
 
 
 def test_num_column_nan():
@@ -21,8 +21,8 @@ def test_num_column_nan():
     col.append("")
     col.append("nan")
     ret_series = col.pd_parse()
-    exp_series = pl.Series([1, 2, np.nan, np.nan], dtype=pl.Float64)
-    assert ret_series.equals(exp_series)
+    exp_series = pd.Series([1, 2, np.nan, np.nan], dtype=float)
+    pd.testing.assert_series_equal(ret_series, exp_series)
 
 
 def test_string_column():
@@ -31,8 +31,8 @@ def test_string_column():
     col.append("2")
     col.append("3")
     ret_series = col.pd_parse()
-    exp_series = pl.Series(["1", "2", "3"], dtype=pl.String)
-    assert ret_series.equals(exp_series)
+    exp_series = pd.Series(["1", "2", "3"], dtype=object)
+    pd.testing.assert_series_equal(ret_series, exp_series)
 
 
 def test_categorical_column():
@@ -41,9 +41,9 @@ def test_categorical_column():
     col.append("b")
     col.append("c")
     ret_series = col.pd_parse()
-    exp_series = pl.Series(["a", "b", "c"], dtype=pl.Categorical)
+    exp_series = pd.Series(["a", "b", "c"], dtype="category")
 
-    assert ret_series.equals(exp_series)
+    pd.testing.assert_series_equal(ret_series, exp_series)
 
 
 def test_latlon_column():
@@ -56,8 +56,8 @@ def test_latlon_column():
     col.append("300S")
 
     ret_series = col.pd_parse()
-    exp_series = pl.Series([10.0, 20.0, 30.0, -10, -20, -30], dtype=pl.Float64)
-    assert ret_series.equals(exp_series)
+    exp_series = pd.Series([10.0, 20.0, 30.0, -10, -20, -30], dtype=float)
+    pd.testing.assert_series_equal(ret_series, exp_series)
 
 
 def test_latlon_column():
@@ -70,8 +70,8 @@ def test_latlon_column():
     col.append("300W")
 
     ret_series = col.pd_parse()
-    exp_series = pl.Series([10.0, 20.0, 30.0, -10, -20, -30], dtype=pl.Float64)
-    assert ret_series.equals(exp_series)
+    exp_series = pd.Series([10.0, 20.0, 30.0, -10, -20, -30], dtype=float)
+    pd.testing.assert_series_equal(ret_series, exp_series)
 
 
 def test_latlon_column_scaled():
@@ -84,8 +84,8 @@ def test_latlon_column_scaled():
     col.append("300W")
 
     ret_series = col.pd_parse()
-    exp_series = pl.Series([10.01, -20.01, 173.1, -173.1, -2, -3], dtype=pl.Float64)
-    assert ret_series.equals(exp_series)
+    exp_series = pd.Series([10.01, -20.01, 173.1, -173.1, -2, -3], dtype=float)
+    pd.testing.assert_series_equal(ret_series, exp_series)
 
 
 def test_datetime_column_defaultfmt():
@@ -98,7 +98,7 @@ def test_datetime_column_defaultfmt():
     col.append("2021010206")
 
     ret_series = col.pd_parse()
-    exp_series = pl.Series(
+    exp_series = pd.Series(
         [
             "2021-01-01 00:00:00",
             "2021-01-01 06:00:00",
@@ -106,9 +106,10 @@ def test_datetime_column_defaultfmt():
             "2021-01-01 18:00:00",
             "2021-01-02 00:00:00",
             "2021-01-02 06:00:00",
-        ]
-    ).str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S")
-    assert ret_series.equals(exp_series)
+        ],
+        dtype="datetime64[ns]",
+    )
+    pd.testing.assert_series_equal(ret_series, exp_series)
 
 
 def test_datetime_column_customfmt():
@@ -121,7 +122,7 @@ def test_datetime_column_customfmt():
     col.append("202101020630")
 
     ret_series = col.pd_parse()
-    exp_series = pl.Series(
+    exp_series = pd.Series(
         [
             "2021-01-01 00:30:00",
             "2021-01-01 06:30:00",
@@ -129,6 +130,7 @@ def test_datetime_column_customfmt():
             "2021-01-01 18:30:00",
             "2021-01-02 00:30:00",
             "2021-01-02 06:30:00",
-        ]
-    ).str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S")
-    assert ret_series.equals(exp_series)
+        ],
+        dtype="datetime64[ns]",
+    )
+    pd.testing.assert_series_equal(ret_series, exp_series)
