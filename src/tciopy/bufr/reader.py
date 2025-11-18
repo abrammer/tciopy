@@ -182,7 +182,7 @@ def read_bufr(filepath: str | pathlib.Path) -> pl.DataFrame:
         Path to the BUFR file.
     """
     data = []
-    with open(input_filepath, 'rb') as bufr_file:
+    with open(filepath, 'rb') as bufr_file:
         # loop for the messages in the file
         for message_count in itertools.count():
             LOGGER.debug("Starting message %s", message_count)
