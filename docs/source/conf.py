@@ -21,6 +21,7 @@ sys.path.insert(0, str((Path(__file__).parent.parent.parent / 'src' ).resolve())
 extensions = [
     # 'sphinx.ext.duration',
     # 'sphinx.ext.doctest',
+    'sphinx_rtd_theme',
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.viewcode',
@@ -37,21 +38,27 @@ autodoc_default_options = {
     'member-order':    'bysource',
     'special-members': '',
     'exclude-members': '__weakref__',
+    'imported-members': False,
 }
 autoclass_content = 'both'
 autosummary_generate = True
+autosummary_imported_members = False
+autodoc_inherit_docstrings = False
 numpydoc_class_members_toctree = True
 numpydoc_show_class_members = False
+
+# Suppress duplicate object warnings and other common warnings
+suppress_warnings = [
+    'autosummary',
+    'ref.python',
+    'app.add_node',  # Suppress warnings about duplicate nodes
+    'app.add_directive',  # Suppress warnings about duplicate directives  
+    'toc.not_included',  # Suppress warnings about documents not in toctree (for auto-generated aliases)
+]
+# Don't warn about duplicate descriptions - these are expected for re-exported functions
+nitpicky = False
 
 templates_path = ['_templates']
 exclude_patterns = []
 
-
-
-# -- Options for HTML output -------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
-
-import sphinx_rtd_theme
-html_theme = 'sphinx_rtd_theme'
-html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
-html_static_path = ['_static']
+html_theme = "sphinx_rtd_theme"

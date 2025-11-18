@@ -20,13 +20,19 @@ The package can be installed using pip:
   
   python -m pip install tciopy
 
+
 Usage
 ==================
-Currently the package has 4 primary functions:
-   ```read_adeck```
-   ```read_cxml```
-   ```read_fdeck```
-   ```read_bdeck```
+   These functions provide readers for various tropical cyclone data formats:
+
+   - .. autofunction :: tciopy.read_adeck
+   - .. autofunction :: tciopy.read_bdeck
+   - .. autofunction :: tciopy.read_fdeck
+   - .. autofunction :: tciopy.read_edeck
+   - .. autofunction :: tciopy.read_adecks
+   - .. autofunction :: tciopy.read_bdecks
+   - .. autofunction :: tciopy.read_cxml
+   - .. autofunction :: tciopy.bufr.read_bufr
 
    e.g.
    
@@ -35,13 +41,13 @@ Currently the package has 4 primary functions:
    :suppress:
 
    from pathlib import Path
-   datadir = Path().resolve().parent.parent / 'data'
+   datadir = Path().resolve().parent / 'data'
    print(datadir)
 
 .. ipython:: python
 
    from tciopy import read_adeck
-   adeck = read_adeck(datadir / 'aal032023.dat')
+   adeck = read_adeck(datadir / 'aal032023.dat').collect()
    print(adeck.head())
    
 
@@ -49,7 +55,7 @@ Currently the package has 4 primary functions:
 
    from tciopy import read_fdeck
    fdeck = read_fdeck(datadir / 'fal132023.dat')
-   print(fdeck.head())
+   print(fdeck[10].head())
    
 
 .. ipython:: python

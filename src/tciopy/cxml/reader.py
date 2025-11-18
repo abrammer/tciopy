@@ -5,6 +5,7 @@ Reader for TC-CXML files, to unpack into a pandas dataframe matching column name
 """
 import warnings
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import numpy as np
 import polars as pl
@@ -32,7 +33,7 @@ XML_TO_COLNAME = {
 }
 
 
-def read_cxml(file_path):
+def read_cxml(file_path: str | Path) -> pl.DataFrame:
     tree = ET.parse(file_path)
     root = tree.getroot()
     center = tree.find(".//name").text

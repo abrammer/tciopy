@@ -2,4 +2,4 @@ sphinx-rtd-theme
 sphinx
 ipython
 numpy
-pandas
+polars
