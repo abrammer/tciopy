@@ -64,6 +64,12 @@ Usage
    cxdeck = read_cxml(datadir / 'complete_cxml.xml')
    print(cxdeck.head())
 
+.. ipython:: python
+
+   from tciopy.bufr import read_bufr
+   bufrdeck = read_bufr(datadir / '20240823060000-240h-oper-tf.bufr')
+   print(bufrdeck.head())
+
 
 .. note:: 
       This documentation is still under construction. Please check back later for more information.
