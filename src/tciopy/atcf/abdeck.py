@@ -82,7 +82,7 @@ def read_adeck(fname: str | Path, return_type:str='polars' ) -> pl.DataFrame:
             .alias("tnum"),
         pl.duration(hours=pl.col("tau")).alias("tau"),
     ]).with_columns(
-        validtime = pl.col("datetime") + pl.col('tau'))
+        validtime = pl.col("datetime") + pl.col('tau')
     )
 
     quadrant_cols = ["NWQ", "NEQ", "SEQ", "SWQ"]

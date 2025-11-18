@@ -8,7 +8,6 @@ from itertools import zip_longest
 
 import polars as pl
 
-from tciopy.atcf.decks import BaseDeck
 from tciopy.converters import tolatlon
 
 LOGGER = logging.getLogger(__name__)
