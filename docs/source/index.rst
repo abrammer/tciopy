@@ -41,7 +41,7 @@ Usage
    :suppress:
 
    from pathlib import Path
-   datadir = Path().resolve().parent / 'data'
+   datadir = Path().resolve().parent.parent / 'data'
    print(datadir)
 
 .. ipython:: python
