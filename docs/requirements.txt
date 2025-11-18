@@ -3,3 +3,4 @@ sphinx
 ipython
 numpy
 polars
+eccodes
