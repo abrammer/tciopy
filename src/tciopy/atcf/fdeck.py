@@ -13,20 +13,20 @@ from tciopy.converters import tolatlon
 LOGGER = logging.getLogger(__name__)
 
 def read_fdeck(fname: str, format_filter: list[int] = None) -> dict[str, pl.DataFrame]:
-    """Read an e-deck file into a polars DataFrame
+    """Read an f-deck file into a polars DataFrame
+    
     Parameters
     ----------
     fname : str or Path
-        Path to the edeck file. Can be gzipped.
-    
-    format_filter : list of str, optional
-        List of edeck formats to read. If None, all formats are read.
-        Valid formats are: "TR", "IN", "RI", "RW", "WR", "PR", "GN", "GS", "ER"
+        Path to the fdeck file. Can be gzipped.
+    format_filter : list of int, optional
+        List of fdeck format codes to read. If None, all formats are read.
+        Valid formats are: 10, 20, 30, 31, 40, 50, 60, 70
     
     Returns
     -------
     dict[str, pl.DataFrame]
-        Dictionary of Polars DataFrames containing the edeck data, keyed by format.
+        Dictionary of Polars DataFrames containing the fdeck data, keyed by format code.
     """
     if not isinstance(fname, Path):
         fname = Path(fname)

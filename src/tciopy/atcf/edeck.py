@@ -12,11 +12,11 @@ LOGGER = logging.getLogger(__name__)
 
 def read_edeck(fname: str, format_filter: list[str] = None) -> dict[str, pl.DataFrame]:
     """Read an e-deck file into a polars DataFrame
+    
     Parameters
     ----------
     fname : str or Path
         Path to the edeck file. Can be gzipped.
-    
     format_filter : list of str, optional
         List of edeck formats to read. If None, all formats are read.
         Valid formats are: "TR", "IN", "RI", "RW", "WR", "PR", "GN", "GS", "ER"

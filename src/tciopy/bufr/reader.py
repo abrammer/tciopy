@@ -172,7 +172,7 @@ def extract_timeperiod(i, bufr, members):
     return temp_df
 
 
-def read_bufr(filepath:pathlib.Path) -> pl.DataFrame:
+def read_bufr(filepath: str | pathlib.Path) -> pl.DataFrame:
     """
     Read a BUFR file and return a DataFrame.
 
