@@ -62,6 +62,70 @@ def mean_location(lat: pl.Series | pl.Expr, lon: pl.Series | pl.Expr) -> tuple[p
 
     return lat_mean, lon_mean
 
+def storm_direction(lat: pl.Series | pl.Expr, lon: pl.Series | pl.Expr) -> pl.Expr:
+    """
+    Calculate the storm direction in degrees clockwise from north
+    given series of latitudes and longitudes.
+
+    Args:
+        lat (polars.Series): Series of latitudes in decimal degrees.
+        lon (polars.Series): Series of longitudes in decimal degrees.
+    Returns:
+        polars.Expr: Storm direction in degrees clockwise from north.
+    """
+    dlat = lat.diff()
+    dlon = lon.diff()
+
+    angle_rad = pl.arctan2(dlon, dlat)
+    angle_deg = (angle_rad.degrees()) % 360
+    angle_deg = angle_deg.fill_null(angle_deg.shift(-1))
+    return angle_deg.alias('storm_dir')
+
+def storm_speed(lat: pl.Series | pl.Expr, lon: pl.Series | pl.Expr, tau: pl.Series | pl.Expr) -> pl.Expr:
+    """
+    Calculate the storm speed in km/h given series of latitudes,
+    longitudes, and forecast lead times (tau) in hours.
+
+    Args:
+        lat (polars.Series): Series of latitudes in decimal degrees.
+        lon (polars.Series): Series of longitudes in decimal degrees.
+        tau (polars.Series): Series of forecast lead times in duration[μs].
+    Returns:
+        polars.Expr: Storm speed in km/h.
+    """
+    distance = haversine_distance(
+        lat.shift(1).fill_null(lat),
+        lon.shift(1).fill_null(lon),
+        lat,
+        lon
+    )
+    delta_tau = tau.diff().dt.total_hours().fill_null(1)  # Avoid division by zero
+
+    speed = (distance / delta_tau).alias('storm_speed')
+    return speed
+
+def direction_spread(lat: pl.Expr, lon:pl.Expr, direction: pl.Expr, sigmax: float = 2) -> pl.Expr:
+    """
+    Calculate the distance of points in a given direction.
+
+    Args:
+        lat (polars.Series): Series of latitudes in decimal degrees.
+        lon (polars.Series): Series of longitudes in decimal degrees.
+        direction (polars.Series): Series of directions in degrees clockwise from north.
+    Returns:
+        polars.Expr: distance from mean in the given direction in km. +/- values indicate direction from mean.
+            +ve values are in the direction, -ve values are opposite.
+    """
+    mean_lat, mean_lon = mean_location(lat, lon)
+    direction_rad = direction.radians()
+    delta_lat = (lat - mean_lat).radians()
+    delta_lon = (lon - mean_lon).radians()
+    projected_distance = (EARTH_RADIUS_KM * (
+        (delta_lat * direction_rad.cos()) +
+        (delta_lon * direction_rad.sin() * mean_lat.radians().cos())
+    ))
+    
+    return projected_distance
 
 def lon_lat_to_cartesian(lon, lat, radius=EARTH_RADIUS_KM):
     """
@@ -90,6 +154,62 @@ def cartesian_to_lon_lat(x, y, z, radius=EARTH_RADIUS_KM):
     lon = np.degrees(phi)
     lat = np.degrees(theta)
     return lon, lat
+
+
+def calculate_ellipse(lat, lon):
+    ''' Given Pandas group with lat,lon calculate EOF for Major/Minor
+        ellipse axis or eigen values and vectors'''
+
+    sla = lat.var()
+    slo = lon.var()
+    rho = pl.cov(lat, lon)
+
+    trace = sla + slo
+    determinant = (sla * slo) - (rho * rho)
+    term = ((trace ** 2 - 4 * determinant).sqrt()) / 2
+    
+    # Eigenvalues
+    eig_val_1 = (trace / 2) + term
+    eig_val_2 = (trace / 2) - term
+    
+    # Take square root and sort by magnitude
+    eig_val_1_sqrt = eig_val_1.sqrt()
+    eig_val_2_sqrt = eig_val_2.sqrt()
+    
+    ellipse_major = pl.max_horizontal(eig_val_1_sqrt, eig_val_2_sqrt).alias('ellipse_major')
+    ellipse_minor = pl.min_horizontal(eig_val_1_sqrt, eig_val_2_sqrt).alias('ellipse_minor')
+    
+    # Calculate angle based on which eigenvalue is larger
+    # angle = 90 + arctan2(eigenvector_y, eigenvector_x)
+    angle = (pl.lit(90) + pl.arctan2(eig_val_1 - slo, rho).degrees()) % 360
+    angle = angle.alias('ellipse_angle')
+
+    return ellipse_major, ellipse_minor, angle
+
+
+def calculate_new_lon_lat(lon, lat, delta_along, delta_cross, direction):
+    """
+    Calculate new lon/lat given original lon/lat, displacements along
+    and across a given direction (degrees clockwise from north)
+    """
+    # Convert degrees to radians
+    direction_rad = direction.radians()
+    lat_rad = lat.radians()
+    lon_rad = lon.radians()
+
+    # Calculate displacements in lat/lon
+    delta_lat = (delta_along * direction_rad.cos() - delta_cross * direction_rad.sin()) / EARTH_RADIUS_KM
+    delta_lon = (delta_along * direction_rad.sin() + delta_cross * direction_rad.cos()) / (EARTH_RADIUS_KM * lat_rad.cos())
+
+    # New lat/lon in radians
+    new_lat_rad = lat_rad + delta_lat
+    new_lon_rad = lon_rad + delta_lon
+
+    # Convert back to degrees
+    new_lat = new_lat_rad.degrees()
+    new_lon = new_lon_rad.degrees()
+
+    return new_lon.alias('lon'), new_lat.alias('lat')
 
 
 # def swap_to_cartesian(df: pd.DataFrame) -> pd.DataFrame:

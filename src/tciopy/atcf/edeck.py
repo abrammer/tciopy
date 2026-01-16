@@ -3,8 +3,10 @@ import re
 from pathlib import Path
 import logging
 
+import numpy as np
 import polars as pl
 
+from tciopy.atcf.abdeck import fillnan
 from tciopy.converters import tolatlon
 
 LOGGER = logging.getLogger(__name__)
@@ -117,7 +119,7 @@ track_schema.update({
 
 wind_radii_schema = edeck_base_schema.copy()
 wind_radii_schema.update({
-    "probitem": pl.Float32(),   #: ProbItem - Wind speed (bias adjusted), 0 - 300 kts,  3 char.
+    "probitem": pl.Float32(),   #: ProbItem - Wind radii (bias adjusted), 0 - 300 nm,  3 char.
     "th": pl.Int16(),           #: TH - Wind Threshold (e.g., 34),  2 char.
     "half_range": pl.Float32(), #: Half_Range - Half the probability range (radius in n mi), 15 - 200 n mi,  4 char.
     "extra": pl.String()        # Placeholder for any null values
@@ -214,19 +216,145 @@ edeck_schemas={'TR': track_schema,
                'ER': eyewall_replacement_schema}
 
 
+def make_in_edeck(mdeck: pl.DataFrame, tech: pl.Expr, prob: pl.Expr, half_range: pl.Expr, mean=pl.Expr,
+                  lat: pl.Expr=pl.lit(None), lon: pl.Expr=pl.lit(None), extra: pl.Expr =pl.lit('')
+                  ) -> pl.DataFrame:
+    return mdeck.select(
+        basin = pl.col('basin'),
+        number = pl.col('number'),
+        datetime =pl.col('datetime'),
+        tau = pl.col('tau').dt.total_hours(),
+        lat = lat,
+        lon = lon,
+        tech = tech,
+        format = pl.lit('IN'),
+        ty = pl.lit(''),
+        prob = prob,
+        windcode = pl.lit(""),
+        half_range = half_range,
+        probitem = mean,
+        extra = extra,
+    )
+
+
+def make_tr_edeck(mdeck: pl.DataFrame, tech: pl.Expr, prob: pl.Expr, prob_item: pl.Expr, 
+                  dir: pl.Expr, rad_cross: pl.Expr, rad_along: pl.Expr,
+                  bias_cross: pl.Expr, bias_along: pl.Expr,
+                  extra: pl.Expr =pl.lit('')
+                  ) -> pl.DataFrame:
+    return mdeck.select(
+        basin = pl.col('basin'),
+        number = pl.col('number'),
+        datetime =pl.col('datetime'),
+        tau = pl.col('tau').dt.total_hours(),
+        lat = pl.col('lat'),
+        lon = pl.col('lon'),
+        tech = tech,
+        format = pl.lit('TR'),
+        ty = pl.lit(''),
+        prob = prob,
+        dir = dir,
+        windcode = pl.lit(""),
+        probitem = prob_item,
+        rad_cross = rad_cross,
+        rad_along = rad_along,
+        bias_cross = bias_cross,
+        bias_along = bias_along,
+        extra = extra
+    )
+
+
+def fillnan(val, nafill=0):
+    if val is None or (isinstance(val, float) and np.isnan(val)):
+        return nafill
+    return val
+
+
+def format_base_line(row):
+    """Format the base edeck line common to all edeck types."""
+    return (f"{row['basin']:>2}, {row['number']:>2}, {row['datetime']:%Y%m%d%H}, "
+            f"{row['format']:>2}, {row['tech']:>4}, {row['tau']:3.0f}, "
+            f"{abs(fillnan(row['lat'])*10):>3.0f}{'N' if row['lat']>=0 else 'S'}, "
+            f"{abs(fillnan(row['lon'])*10):>4.0f}{'E' if row['lon']>0 else 'W'}, "
+            f"{row['prob']:3.0f}, ")
+
+
+def format_track_line(row):
+    base =  format_base_line(row)
+    values = (
+        f"{row['probitem']:4.0f}, {row['ty']:>2}, {row['dir']:3.0f}, {row['windcode']:>3}, "
+        f"{row['rad_cross']:4.0f}, {row['rad_along']:4.0f}, {row['bias_cross']:4.0f}, {row['bias_along']:4.0f}, {row['extra']}")
+
+    return base + values
+
+
+def format_intensity_line(row):
+    if not row['lat']:
+        lat_s = "    "
+    else:
+        lat_s = f"{abs(fillnan(row['lat'])*10):>3.0f}{'N' if row['lat']>=0 else 'S'}"
+    if not row['lon']:
+        lon_s = "     "
+    else:
+        lon_s = f"{abs(fillnan(row['lon'])*10):>4.0f}{'E' if row['lon']>0 else 'W'}"
+
+    base = (f"{row['basin']:>2}, {row['number']:>2}, {row['datetime']:%Y%m%d%H}, "
+            f"{row['format']:>2}, {row['tech']:>4}, {row['tau']:3.0f}, "
+            f"{lat_s}, {lon_s}, {row['prob']:3.0f}, ")
+    values = (
+        f"{row['probitem']:3.0f}, {row['ty']:>2}, {row['half_range']:4.0f}, {row['extra']}")
+    return base + values
+
+
+output_formatters = {
+    'TR': format_track_line,
+    'IN': format_intensity_line,
+}
+
+
+def write_edeck(outf, deck: pl.DataFrame):
+    """Write an edeck DataFrame to a CSV or Parquet file.
+    
+    Parameters
+    ----------
+    deck : pl.DataFrame
+        The edeck DataFrame to write.
+    
+    outfile : str
+        The output file path. The file extension determines the format (CSV or Parquet).
+    """
+    # Accept either a LazyFrame or a collected DataFrame
+    if isinstance(deck, pl.LazyFrame):
+        deck = deck.collect()
+    deck = deck.sort(['basin','number','datetime','format','tech','tau'])
+    for row in deck.iter_rows(named=True):
+        try:
+            formatter = output_formatters.get(row['format'], format_base_line)
+        except KeyError:
+            LOGGER.warning("No formatter found for edeck format %s, using base formatter.", row['format'])
+            continue
+        line = formatter(row)
+        line = line.rstrip("\n")
+        outf.write(f"{line}\n")
+    outf.write("")
+
+
 if __name__ == "__main__":
     # Example usage
     import time
-    input_filepath = "/Users/abrammer/repos/tciopy/data/eal202023.dat"  # Replace with your file path
+    input_filepath = "./data/eal202023.dat"  # Replace with your file path
     stime = time.time()
     decks = read_edeck(input_filepath, format_filter=["TR","IN"])
+    decks = pl.concat(decks.values(), how="diagonal").sort(["basin","number","datetime","format","tech","tau"])
+    
+    with open("output_edeck.txt", "w") as outf:
+        write_edeck(outf, decks)
+
     print(time.time() - stime)
-    for dtype, deck in decks.items():
-        print(f"Deck type: {dtype}")
-        print(deck.head())
-        print(deck.schema)
-        print(deck.columns)
-        print(deck.shape)
+    print(decks.head())
+    print(decks.schema)
+    print(decks.columns)
+    print(decks.shape)
         # You can also save to CSV or Parquet if needed
         # deck.write_csv(f"{key}_edeck.csv")
         # deck.write_parquet(f"{key}_edeck.parquet")
