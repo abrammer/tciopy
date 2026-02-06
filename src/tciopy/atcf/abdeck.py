@@ -8,6 +8,8 @@ import polars as pl
 import polars.selectors as cs
 
 from tciopy.converters import tolatlon
+from tciopy.utils import fillnan
+
 
 adeck_schema = pl.Schema({
     "basin": pl.String,
@@ -146,12 +148,6 @@ def write_adeck(outf, deck: pl.DataFrame):
             line = line.rstrip("\n")
             outf.write(f"{line}\n")
         outf.write("")
-
-
-def fillnan(val, nafill=0):
-    if val is None or (isinstance(val, float) and np.isnan(val)):
-        return nafill
-    return val
 
 
 def format_adeck_line(row):

@@ -4,6 +4,12 @@ import polars as pl
 EARTH_RADIUS_KM = 6371.0  # Radius of Earth in kilometers
 
 
+def fillnan(val, nafill=0):
+    if val is None or (isinstance(val, float) and np.isnan(val)):
+        return nafill
+    return val
+
+
 def haversine_distance(lat1: pl.Series | pl.Expr, lon1: pl.Series | pl.Expr, lat2: pl.Series | pl.Expr, lon2: pl.Series | pl.Expr) -> pl.Expr:
     """
     Calculates the Haversine distance between two points on the Earth
@@ -62,6 +68,7 @@ def mean_location(lat: pl.Series | pl.Expr, lon: pl.Series | pl.Expr) -> tuple[p
 
     return lat_mean, lon_mean
 
+
 def storm_direction(lat: pl.Series | pl.Expr, lon: pl.Series | pl.Expr) -> pl.Expr:
     """
     Calculate the storm direction in degrees clockwise from north
@@ -80,6 +87,7 @@ def storm_direction(lat: pl.Series | pl.Expr, lon: pl.Series | pl.Expr) -> pl.Ex
     angle_deg = (angle_rad.degrees()) % 360
     angle_deg = angle_deg.fill_null(angle_deg.shift(-1))
     return angle_deg.alias('storm_dir')
+
 
 def storm_speed(lat: pl.Series | pl.Expr, lon: pl.Series | pl.Expr, tau: pl.Series | pl.Expr) -> pl.Expr:
     """
@@ -104,7 +112,8 @@ def storm_speed(lat: pl.Series | pl.Expr, lon: pl.Series | pl.Expr, tau: pl.Seri
     speed = (distance / delta_tau).alias('storm_speed')
     return speed
 
-def direction_spread(lat: pl.Expr, lon:pl.Expr, direction: pl.Expr, sigmax: float = 2) -> pl.Expr:
+
+def direction_spread(lat: pl.Expr, lon:pl.Expr, direction: pl.Expr) -> pl.Expr:
     """
     Calculate the distance of points in a given direction.
 
@@ -126,6 +135,7 @@ def direction_spread(lat: pl.Expr, lon:pl.Expr, direction: pl.Expr, sigmax: floa
     ))
     
     return projected_distance
+
 
 def lon_lat_to_cartesian(lon, lat, radius=EARTH_RADIUS_KM):
     """

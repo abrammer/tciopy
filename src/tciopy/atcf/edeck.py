@@ -6,7 +6,7 @@ import logging
 import numpy as np
 import polars as pl
 
-from tciopy.atcf.abdeck import fillnan
+from tciopy.utils import fillnan
 from tciopy.converters import tolatlon
 
 LOGGER = logging.getLogger(__name__)
@@ -264,18 +264,43 @@ def make_tr_edeck(mdeck: pl.DataFrame, tech: pl.Expr, prob: pl.Expr, prob_item: 
     )
 
 
-def fillnan(val, nafill=0):
-    if val is None or (isinstance(val, float) and np.isnan(val)):
-        return nafill
-    return val
+def make_ri_edeck(mdeck: pl.DataFrame, tech: pl.Expr, prob: pl.Expr, prob_item: pl.Expr,
+                  v: pl.Expr, initials: pl.Expr, ri_start_tau: pl.Expr, ri_stop_tau: pl.Expr, extra: pl.Expr =pl.lit('')
+                  ) -> pl.DataFrame:
+    return mdeck.select(
+        basin = pl.col('basin'),
+        number = pl.col('number'),
+        datetime =pl.col('datetime'),
+        tau = pl.col('tau').dt.total_hours(),
+        lat = pl.col('lat'),
+        lon = pl.col('lon'),
+        tech = tech,
+        format = pl.lit('RI'),
+        ty = pl.lit(''),
+        prob = prob,
+        v = v,
+        initials = initials,
+        ri_start_tau = ri_start_tau,
+        ri_stop_tau = ri_stop_tau,
+        probitem = prob_item,
+        extra = extra
+    )
 
 
 def format_base_line(row):
     """Format the base edeck line common to all edeck types."""
+    if not row['lat']:
+        lat_s = "    "
+    else:
+        lat_s = f"{abs(fillnan(row['lat'])*10):>3.0f}{'N' if row['lat']>=0 else 'S'}"
+    if not row['lon']:
+        lon_s = "     "
+    else:
+        lon_s = f"{abs(fillnan(row['lon'])*10):>4.0f}{'E' if row['lon']>0 else 'W'}"
+
     return (f"{row['basin']:>2}, {row['number']:>2}, {row['datetime']:%Y%m%d%H}, "
             f"{row['format']:>2}, {row['tech']:>4}, {row['tau']:3.0f}, "
-            f"{abs(fillnan(row['lat'])*10):>3.0f}{'N' if row['lat']>=0 else 'S'}, "
-            f"{abs(fillnan(row['lon'])*10):>4.0f}{'E' if row['lon']>0 else 'W'}, "
+            f"{lat_s}, {lon_s}, "
             f"{row['prob']:3.0f}, ")
 
 
@@ -289,26 +314,24 @@ def format_track_line(row):
 
 
 def format_intensity_line(row):
-    if not row['lat']:
-        lat_s = "    "
-    else:
-        lat_s = f"{abs(fillnan(row['lat'])*10):>3.0f}{'N' if row['lat']>=0 else 'S'}"
-    if not row['lon']:
-        lon_s = "     "
-    else:
-        lon_s = f"{abs(fillnan(row['lon'])*10):>4.0f}{'E' if row['lon']>0 else 'W'}"
-
-    base = (f"{row['basin']:>2}, {row['number']:>2}, {row['datetime']:%Y%m%d%H}, "
-            f"{row['format']:>2}, {row['tech']:>4}, {row['tau']:3.0f}, "
-            f"{lat_s}, {lon_s}, {row['prob']:3.0f}, ")
+    base = format_base_line(row)
     values = (
         f"{row['probitem']:3.0f}, {row['ty']:>2}, {row['half_range']:4.0f}, {row['extra']}")
+    return base + values
+
+
+def format_ri_line(row):
+    base = format_base_line(row)
+    values = (
+        f"{row['probitem']:3.0f}, {row['v']:3.0f}, {row['initials']:>3}, "
+        f"{row['ri_start_tau']:3.0f}, {row['ri_stop_tau']:3.0f}, {row['extra']}")
     return base + values
 
 
 output_formatters = {
     'TR': format_track_line,
     'IN': format_intensity_line,
+    'RI': format_ri_line,
 }
 
 
@@ -344,7 +367,7 @@ if __name__ == "__main__":
     import time
     input_filepath = "./data/eal202023.dat"  # Replace with your file path
     stime = time.time()
-    decks = read_edeck(input_filepath, format_filter=["TR","IN"])
+    decks = read_edeck(input_filepath, format_filter=["TR","IN", "RI"])
     decks = pl.concat(decks.values(), how="diagonal").sort(["basin","number","datetime","format","tech","tau"])
     
     with open("output_edeck.txt", "w") as outf:
