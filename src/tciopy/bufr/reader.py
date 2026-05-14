@@ -12,7 +12,7 @@ from eccodes import (codes_bufr_new_from_file, codes_get, codes_set,
                      CODES_MISSING_LONG, codes_release)
 import gribapi
 
-## to do refactor this to less assumptive and more polars friendly. 
+## to do refactor this to less assumptive and more polars friendly.
 ## bufr -> to_json -> polars dataframe. ??
 
 LOGGER = logging.getLogger(__name__)
@@ -44,12 +44,12 @@ def get_wind_radii(bufr, i):
         radms = codes_get(bufr, "#%d#windSpeedThreshold" % (rank1 + j))
         if radms == CODES_MISSING_DOUBLE or radms == CODES_MISSING_LONG:
             continue
-        radkt = np.floor(radms * 1.943) # convert from ms to kts ! should we do this or keep in native units. 
+        radkt = np.floor(radms * 1.943) # convert from ms to kts ! should we do this or keep in native units.
         for k in range(1,5):
             # there is a logic to this, but it relies heavily on assuming the number of entries per time dont change
             # the rank increments with each use.  so hard code the ranks based on the time index and how much data has been consumed.
             rank2 = i*12 + ((j-1)*4) + k
-            rank3 = i*24 + ((j-1)*8) + (k*2) 
+            rank3 = i*24 + ((j-1)*8) + (k*2)
             _rad = codes_get_array(bufr, "#%d#effectiveRadiusWithRespectToWindSpeedsAboveThreshold" % rank2)
             units = codes_get(bufr, "#%d#effectiveRadiusWithRespectToWindSpeedsAboveThreshold->units" % rank2)
             _bear1 = codes_get(bufr, "#%d#bearingOrAzimuth" % (rank3-1))
@@ -82,7 +82,7 @@ def get_analysis_data(bufr, member_number):
         lat, lon, loc_prefix = get_location(bufr, 2)
         LOGGER.debug("Extracted latitude %s, longitude %s", lat, lon)
     except gribapi.errors.ArrayTooSmallError:
-        LOGGER.info("No pertubed location found")
+        LOGGER.debug("No perturbed location found")
         lat, lon, loc_prefix = get_location(bufr, 1)
         LOGGER.debug("Observed latitude %s, longitude %s", lat, lon)
     temp_df = expand_value(f'{loc_prefix}latitude', lat, temp_df)
@@ -231,7 +231,7 @@ def read_bufr(filepath: str | pathlib.Path) -> pl.DataFrame:
             codes_release(bufr)
 
     # close the BUFR file
-    all_df = pl.concat(data, how='diagonal')
+    all_df = pl.concat(data, how='diagonal_relaxed')
     all_df = all_df.with_columns(
         pl.col(pl.Float64).replace(CODES_MISSING_DOUBLE, None),
         pl.col(pl.Int64).replace(CODES_MISSING_LONG, None),
@@ -257,5 +257,5 @@ if __name__ == "__main__":
     # Save the DataFrame to a CSV file
     LOGGER.info("Saving DataFrame to CSV file: %s", input_filepath.with_suffix('.csv'))
     df.write_csv(input_filepath.with_suffix('.csv'), float_scientific=False, float_precision=1)
-    
+
     # print(df)
